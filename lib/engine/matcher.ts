@@ -131,7 +131,13 @@ export function matchCandidateAgainstJob(
   let expStatus: "exceeds" | "meets" | "below" = "meets";
   let expScore = 70;
 
-  if (detectedYears >= requiredYears + 1.5) {
+  if (requiredMatched.length === 0) {
+    expStatus = "below";
+    expScore = 15;
+    missingRequirements.push(
+      `Documented experience is in an unrelated domain with zero matching technical requirements`
+    );
+  } else if (detectedYears >= requiredYears + 1.5) {
     expStatus = "exceeds";
     expScore = 100;
     strongMatches.push(
@@ -197,12 +203,17 @@ export function matchCandidateAgainstJob(
       eduScore = 95;
       eduDegreeMatch = `Relevant technical degree (${highest.degree}) satisfied`;
       strongMatches.push(`Required degree satisfied (${highest.degree} from ${highest.institution})`);
+    } else if (/high\s+school|secondary/i.test(highest.degree)) {
+      eduScore = 20;
+      eduMeets = false;
+      eduDegreeMatch = "High school diploma (technical degree or equivalent practical experience required)";
+      missingRequirements.push("Formal higher education / technical degree requirement not satisfied");
     } else {
       eduScore = 80;
       eduDegreeMatch = `Degree present (${highest.degree}), non-traditional background supported by practical experience`;
     }
   } else {
-    eduScore = 55;
+    eduScore = 35;
     eduMeets = false;
     eduDegreeMatch = "No formal degree explicitly detailed in resume";
     missingRequirements.push("Formal education details not identified in resume");
@@ -253,14 +264,19 @@ export function matchCandidateAgainstJob(
     });
   }
 
-  let projectScore = 75;
+  let projectScore = 50;
   if (relevantProjects.length >= 2) {
     projectScore = 95;
     strongMatches.push(`Strong portfolio of ${relevantProjects.length} relevant projects demonstrating target tech`);
   } else if (relevantProjects.length === 1) {
-    projectScore = 85;
-  } else if (candidate.workHistory.length >= 3) {
+    const hasDirectReqTech = relevantProjects[0].techUsed.some((t) =>
+      job.requirements.requiredSkills.some((r) => r.toLowerCase() === t.toLowerCase())
+    );
+    projectScore = hasDirectReqTech ? 80 : 70;
+  } else if (candidate.workHistory.length >= 2 && requiredMatched.length >= 3) {
     projectScore = 80; // Compensated by rich work history
+  } else if (candidate.projects.length === 0 && requiredMatched.length === 0) {
+    projectScore = 10;
   }
 
   const projectResult: ProjectMatchResult = {
@@ -271,15 +287,19 @@ export function matchCandidateAgainstJob(
 
   // ================= 5. RESPONSIBILITY ALIGNMENT =================
   const responsibilityAlignment: ResponsibilityMatchItem[] = [];
-  const candidateCorpus = `${candidate.rawResumeText} ${candidate.workHistory.map((w) => w.description).join(" ")}`.toLowerCase();
+  const candidateCorpus = [
+    candidate.rawResumeText,
+    ...candidate.workHistory.map((w) => `${w.title} ${w.description} ${w.achievements?.join(" ") || ""} ${w.technologies?.join(" ") || ""}`),
+    ...candidate.projects.map((p) => `${p.title} ${p.description} ${p.technologies?.join(" ") || ""}`),
+  ].join(" ").toLowerCase();
 
   for (const resp of job.requirements.keyResponsibilities) {
     // Keyword extraction from responsibility
     const respWords = resp
       .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/[^a-z0-9\s]/g, " ")
       .split(/\s+/)
-      .filter((w) => w.length > 4 && !["maintain", "ensure", "collaborate", "deliver"].includes(w));
+      .filter((w) => w.length >= 3 && !["and", "the", "for", "with", "into", "through", "using", "ensure", "maintain"].includes(w));
 
     let matchedWordCount = 0;
     for (const word of respWords) {
@@ -292,10 +312,10 @@ export function matchCandidateAgainstJob(
     let matchLevel: "strong" | "moderate" | "weak" = "weak";
     let candidateEvidence = "Limited direct evidence in employment descriptions.";
 
-    if (ratio >= 0.5) {
+    if (ratio >= 0.35) {
       matchLevel = "strong";
       candidateEvidence = `Strong alignment: candidate has documented experience in ${respWords.filter((w) => candidateCorpus.includes(w)).slice(0, 3).join(", ")}.`;
-    } else if (ratio >= 0.25) {
+    } else if (ratio >= 0.15) {
       matchLevel = "moderate";
       candidateEvidence = `Moderate alignment: related background observed in work history.`;
     }

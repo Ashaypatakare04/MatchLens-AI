@@ -62,8 +62,21 @@ export const SKILL_TAXONOMY: Record<string, SkillDefinition> = {
     aliases: ["postgres", "psql", "postgre sql"],
     category: "database",
     transferableTo: [
-      { target: "MySQL", rationale: "Relational modeling, indexing, ACID transactions, and SQL syntax transfer directly", transferableRatio: 0.9 },
+      { target: "MySQL", rationale: "Relational modeling, indexing, ACID transactions, and SQL syntax transfer directly (conceptual overlap detected; production proficiency should be verified)", transferableRatio: 0.9 },
       { target: "SQL", rationale: "PostgreSQL provides comprehensive ANSI SQL adherence", transferableRatio: 1.0 },
+    ],
+  },
+  mysql: {
+    canonical: "MySQL",
+    aliases: ["mysql database", "my-sql"],
+    category: "database",
+    transferableTo: [
+      {
+        target: "PostgreSQL",
+        rationale: "Relational database modeling, SQL queries, indexing, and schema migrations transfer well to PostgreSQL (conceptual overlap detected; production proficiency should be verified)",
+        transferableRatio: 0.75,
+      },
+      { target: "SQL", rationale: "MySQL adheres to ANSI SQL syntax", transferableRatio: 1.0 },
     ],
   },
   mongodb: {
@@ -79,8 +92,24 @@ export const SKILL_TAXONOMY: Record<string, SkillDefinition> = {
     aliases: ["amazon web services", "amazon aws", "aws cloud"],
     category: "cloud_devops",
     transferableTo: [
-      { target: "GCP", rationale: "Core cloud concepts (IAM, compute, object storage, serverless) transfer between AWS and GCP", transferableRatio: 0.8 },
-      { target: "Azure", rationale: "Enterprise cloud primitives share architectural equivalence", transferableRatio: 0.8 },
+      { target: "GCP", rationale: "Core cloud concepts (IAM, compute, object storage, serverless) transfer between AWS and GCP (conceptual overlap detected; production proficiency should be verified)", transferableRatio: 0.8 },
+      { target: "Azure", rationale: "Enterprise cloud primitives share architectural equivalence (conceptual overlap detected; production proficiency should be verified)", transferableRatio: 0.8 },
+    ],
+  },
+  gcp: {
+    canonical: "GCP",
+    aliases: ["google cloud", "google cloud platform"],
+    category: "cloud_devops",
+    transferableTo: [
+      { target: "AWS", rationale: "Cloud primitives (IAM, compute, object storage, VPCs) share architectural equivalence with AWS (conceptual overlap detected; production proficiency should be verified)", transferableRatio: 0.8 },
+    ],
+  },
+  azure: {
+    canonical: "Azure",
+    aliases: ["microsoft azure"],
+    category: "cloud_devops",
+    transferableTo: [
+      { target: "AWS", rationale: "Enterprise cloud primitives share architectural equivalence with AWS (conceptual overlap detected; production proficiency should be verified)", transferableRatio: 0.8 },
     ],
   },
   docker: {
@@ -134,7 +163,7 @@ export const SKILL_TAXONOMY: Record<string, SkillDefinition> = {
     aliases: ["angularjs", "angular 2+"],
     category: "frontend",
     transferableTo: [
-      { target: "React", rationale: "Component hierarchy, state management, and SPA architecture translate well to React", transferableRatio: 0.8 },
+      { target: "React", rationale: "Component hierarchy, state management, and SPA architecture translate well to React (conceptual overlap detected; production proficiency should be verified)", transferableRatio: 0.75 },
       { target: "TypeScript", rationale: "Angular is natively written in TypeScript; candidate possesses strong TS skills", transferableRatio: 0.95 },
     ],
   },
@@ -143,7 +172,7 @@ export const SKILL_TAXONOMY: Record<string, SkillDefinition> = {
     aliases: ["vue", "vuejs", "vue 3"],
     category: "frontend",
     transferableTo: [
-      { target: "React", rationale: "Reactivity model and Single-File Components share deep conceptual overlap with React hooks", transferableRatio: 0.85 },
+      { target: "React", rationale: "Reactivity model and Single-File Components share deep conceptual overlap with React hooks (conceptual overlap detected; production proficiency should be verified)", transferableRatio: 0.85 },
     ],
   },
   redis: {

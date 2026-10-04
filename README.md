@@ -45,10 +45,10 @@ MatchLens AI is deliberately designed with a clear separation between its AI/sem
 Recruiter
    │
    ▼
-Next.js Web Application
+MatchLens Web App
    │
    ▼
-Job / Resume Input Layer
+Job Description / Resume Upload
    │
    ▼
 Document Extraction (PDF via unpdf, DOCX via mammoth, TXT)
@@ -56,30 +56,34 @@ Document Extraction (PDF via unpdf, DOCX via mammoth, TXT)
    ▼
 Information Normalization (Skill taxonomy & chronological timeline resolver)
    │
-   ├── AI / Semantic Analysis
-   │     ├── Job requirement extraction
-   │     ├── Resume semantic comprehension
-   │     ├── Transferable skills mapping
-   │     └── Grounded explanation narrative
-   │
-   ├── Matching Engine
-   │     ├── Skill Matching (exact, synonym, transferable)
-   │     ├── Experience Analysis (verified non-overlapping tenure)
-   │     ├── Responsibility Alignment
-   │     ├── Evidence Retrieval (snippet citation logging)
-   │     └── Consistency Checks (claim vs evidence verification)
+   ▼
+AI / Semantic Analysis (Requirement extraction & semantic relevance)
    │
    ▼
-Deterministic Scoring Layer (Configurable weighted sum formula)
+Matching Engine
+   ├── Skills (exact, synonym, transferable)
+   ├── Experience (verified non-overlapping tenure)
+   ├── Responsibilities (role alignment)
+   ├── Projects (portfolio technology mapping)
+   └── Education (degree verification)
    │
    ▼
-Ranked Candidates Dashboard
+Evidence Layer (Snippet citation logging)
    │
    ▼
-Evidence + Explanation View
+Consistency Checker (Unsupported claims, date overlaps, experience mismatch)
    │
    ▼
-Recruiter Decision (Shortlist / Maybe / Reject + Notes)
+Deterministic Scoring Engine (Configurable weighted sum formula)
+   │
+   ▼
+Ranking (Ranked candidates dashboard)
+   │
+   ▼
+Comparison (Side-by-side synchronized matrix)
+   │
+   ▼
+Recruiter Decision (Shortlist / Interview / Reject + Notes)
 ```
 
 ### Architectural Layer Responsibilities
@@ -168,32 +172,45 @@ npm start
 
 ---
 
-## 9. Recommended 2–4 Minute Judge Demo Sequence
+## 9. Concise Judge Demo Script (Under 4 Minutes)
 
-1. **Landing Page (`/`)**:
-   - Review value proposition: *"Evidence-backed candidate matching for faster, more trustworthy hiring."*
-   - Observe the 5-stage live pipeline preview (*Job Requirements $\to$ Candidate Analysis $\to$ Ranked Shortlist $\to$ Grounded Evidence $\to$ Inconsistency Flags*).
-2. **One-Click Demo Loading**:
-   - Click **"Load Demo Dataset"** in the top navbar.
-   - Instantly loads the CloudScale job and 10 realistic candidates.
-3. **Ranked Candidate Dashboard (`/jobs/.../candidates`)**:
-   - Review top rankings: Alex Rivera #1 (94/100), Elena Rostova #2 (87/100), David Chen #3 (77/100 with transferable skill credit).
-   - Point out the amber badges `⚠ Flagged Claim` on Sarah Jenkins and Vikram Malhotra.
-4. **Deep Candidate Inspection (`/jobs/.../candidates/[id]`)**:
-   - Open **Alex Rivera**: Scannable in 15 seconds. Review Overall Match (94/100), Strong Matches, Score Breakdown, Formula Mechanics, Grounded Evidence quotes with source sections, and Experience Timeline.
-   - Open **Sarah Jenkins**: View the *Potential Inconsistency: Limited supporting evidence for Kubernetes expertise* card.
-   - Open **Vikram Malhotra**: View the *Possible overlapping employment dates* card (20-month full-time overlap).
-   - Open **Jessica Taylor**: View the *Experience claim requires verification* card (8+ years stated vs 2.8 years timeline).
-5. **Configurable Weight Recalculation**:
-   - Click **"Adjust Weights"**. Slide Experience from 25% to 40%. Click **"Normalize to 100%"**, then **"Apply & Recalculate"**.
-   - Watch candidate scores deterministically update in real-time.
-6. **Side-by-Side Comparison (`/jobs/.../compare`)**:
-   - Check boxes for Alex Rivera, Elena Rostova, and David Chen.
-   - Click **"Compare Selected Candidates"** to inspect the synchronized matrix with criteria-based ranking explanations.
-7. **Human-in-the-Loop Decision**:
-   - Toggle recruiter decision to **"Shortlisted"** and save an interview note.
-8. **Automated Reliability Test Suite (`/test-suite`)**:
-   - Open `/test-suite` and click **"Re-Run All 12 Tests"** to demonstrate automated validation across all 12 edge cases.
+- **0:00–0:20 | Problem + Value Proposition**:
+  - Show Landing Page (`/`). State core value proposition: *"Evidence-backed candidate matching for faster, more trustworthy hiring."*
+  - Explain differentiator: *"MatchLens doesn't just rank candidates. It explains the evidence behind every match and flags claims that require verification."*
+
+- **0:20–0:40 | Load Demo Dataset**:
+  - Click **"Load Demo Dataset"** in the top navigation.
+  - Instantly populates the CloudScale *Senior Full-Stack & Cloud Platform Engineer* job requisition with 10 synthetic candidates.
+
+- **0:40–1:15 | Show Ranking & Score Breakdown**:
+  - Open Candidate Dashboard (`/jobs/.../candidates`).
+  - Demonstrate ranked leaderboard: Alex Rivera #1 (94/100), Elena Rostova #2 (89/100), David Chen #3 (81/100).
+  - Point out score badges and color-coded sub-dimension contributions (Skills, Experience, Education, Projects, Responsibilities).
+
+- **1:15–1:50 | Open Candidate & Demonstrate Grounded Evidence**:
+  - Open **Alex Rivera** (`/jobs/.../candidates/cand-alex-rivera`).
+  - Review 15-second scannable breakdown: Overall Match (94/100), Strong Matches, Score Breakdown, Formula Mechanics.
+  - Show grounded evidence citations directly quoting resume snippets, verified sections, and source documents with zero hallucinations.
+
+- **1:50–2:20 | Show Unsupported Claim + Overlapping Dates + Experience Mismatch**:
+  - Open **Sarah Jenkins**: Show *Unsupported skill claim* badge: *"Limited supporting evidence for Kubernetes expertise."*
+  - Open **Vikram Malhotra**: Show *Possible overlapping employment dates* badge (20-month concurrent tenure between Acrobatix and BluePeak).
+  - Open **Jessica Taylor**: Show *Experience claim requires verification* badge (claimed 8+ years in summary vs 2.8 years extracted timeline).
+
+- **2:20–2:45 | Change Experience Weight to 40% & Recalculate**:
+  - Click **"Adjust Weights"**. Slide Experience from 25% to 40%. Click **"Normalize to 100%"** (weights sum to 100%).
+  - Click **"Apply & Recalculate"**. Observe candidate rankings, component contributions, and detail scores deterministically update in real-time.
+
+- **2:45–3:10 | Compare Top Candidates**:
+  - Navigate to `/jobs/.../compare?ids=cand-alex-rivera,cand-elena-rostova,cand-david-chen`.
+  - Demonstrate side-by-side comparative matrix, contrasting Alex's direct Docker/K8s experience against David's transferable Angular $\to$ React and MySQL $\to$ PostgreSQL background.
+
+- **3:10–3:30 | Make Recruiter Decision**:
+  - Mark Alex Rivera as **"Interview"**, record candidate screen notes, and show clean human-in-the-loop decision persistence.
+
+- **3:30–4:00 | Show Automated Edge-Case Suite**:
+  - Navigate to `/test-suite`.
+  - Click **"Re-Run All 12 Tests"** to execute live end-to-end evaluation across all 12 document format, anomaly, and reliability scenarios. Show 12/12 automated validation scenarios passing.
 
 ---
 

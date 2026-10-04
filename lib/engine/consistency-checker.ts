@@ -45,12 +45,14 @@ export function checkProfileConsistency(
   }
 
   // 3. Unsupported Skill / Seniority Claims
-  // Look for bold claims like "expert in X", "master of X", "architect in X", "specialist in X"
+  // Look for bold claims like "expert in X", "architect in X", "specialist in X"
   const expertiseClaims = [
-    { regex: /(?:expert|specialist|master|authority)\s+(?:in|with|of)\s+([a-zA-Z0-9.+]+)/i, label: "Expertise" },
-    { regex: /deep\s+expertise\s+in\s+([a-zA-Z0-9.+]+)/i, label: "Deep Expertise" },
     { regex: /(?:principal|lead|staff)\s+([a-zA-Z0-9.+]+)\s+(?:architect|engineer|developer)/i, label: "Principal/Architect" },
+    { regex: /(?:expert|specialist|authority)\s+(?:in|with)\s+([a-zA-Z0-9.+]+)/i, label: "Expertise" },
+    { regex: /deep\s+expertise\s+in\s+([a-zA-Z0-9.+]+)/i, label: "Deep Expertise" },
   ];
+
+  const processedDomains = new Set<string>();
 
   for (const { regex } of expertiseClaims) {
     const match = candidate.rawResumeText.match(regex);
@@ -58,7 +60,20 @@ export function checkProfileConsistency(
       const fullClaim = match[0];
       const claimedDomain = match[1]?.trim().toLowerCase();
 
-      if (claimedDomain && claimedDomain.length > 2) {
+      // Skip non-technical descriptors and academic degree fields
+      const nonDomainWords = [
+        "science", "arts", "business", "administration", "engineering",
+        "deep", "distributed", "modern", "scalable", "high", "various", "multiple", "broad", "strong"
+      ];
+
+      if (
+        claimedDomain &&
+        claimedDomain.length > 2 &&
+        !nonDomainWords.includes(claimedDomain) &&
+        !processedDomains.has(claimedDomain)
+      ) {
+        processedDomains.add(claimedDomain);
+
         // Check if there is actual project, work experience or cert mentioning this domain
         const foundInProjects = candidate.projects.some((p) =>
           p.description.toLowerCase().includes(claimedDomain) ||

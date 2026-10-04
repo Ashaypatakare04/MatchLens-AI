@@ -157,14 +157,14 @@ function partitionResumeSections(lines: string[]): Record<string, string> {
   let currentKey = "summary";
 
   for (const line of lines) {
-    const lower = line.toLowerCase().trim();
-    if (/^(technical\s+)?skills|technologies|tools|competencies$/i.test(lower)) {
+    const lower = line.toLowerCase().trim().replace(/[:#*=-]+$/, "").trim();
+    if (/^(technical\s+)?skills|technologies|tools|competencies|tech\s+stack$/i.test(lower)) {
       currentKey = "skills";
       continue;
-    } else if (/^(work|professional|employment)\s+experience|experience|employment\s+history$/i.test(lower)) {
+    } else if (/^(work|professional|employment)\s+(experience|history)|experience|employment\s+history|work\s+history$/i.test(lower)) {
       currentKey = "experience";
       continue;
-    } else if (/^education|academic\s+background|degrees$/i.test(lower)) {
+    } else if (/^education|academic\s+background|degrees?$/i.test(lower)) {
       currentKey = "education";
       continue;
     } else if (/^(selected\s+)?projects|personal\s+projects|portfolio$/i.test(lower)) {
@@ -241,6 +241,16 @@ function extractWorkHistory(expText: string): WorkExperienceItem[] {
         rawText: line,
       };
     } else if (currentItem) {
+      if (/^(skills|technologies|tech\s+stack|education|certifications|projects|degrees?)[:\s]/i.test(line)) {
+        currentItem.description = descBuffer.join(" ").trim();
+        currentItem.achievements = [...achievements];
+        items.push(finalizeWorkItem(currentItem));
+        currentItem = null;
+        descBuffer.length = 0;
+        achievements.length = 0;
+        break;
+      }
+
       if (line.startsWith("-") || line.startsWith("•") || line.startsWith("*")) {
         const clean = line.replace(/^[-•*\s]+/, "");
         achievements.push(clean);
@@ -287,6 +297,19 @@ function extractEducation(eduText: string): EducationItem[] {
   for (const line of lines) {
     const lower = line.toLowerCase();
     if (
+      lower.includes("high school") ||
+      lower.includes("secondary school") ||
+      (lower.includes("diploma") && !lower.includes("post-graduate"))
+    ) {
+      items.push({
+        degree: "High School Diploma",
+        institution: "Secondary Education",
+        rawText: line,
+      });
+      continue;
+    }
+
+    if (
       lower.includes("bachelor") ||
       lower.includes("master") ||
       lower.includes("phd") ||
@@ -326,14 +349,7 @@ function extractEducation(eduText: string): EducationItem[] {
     }
   }
 
-  if (items.length === 0) {
-    items.push({
-      degree: "Computer Science or Related Field",
-      institution: "Accredited University",
-      rawText: "Extracted from resume background",
-    });
-  }
-
+  // Do not fabricate degrees if none were identified in the resume
   return items;
 }
 

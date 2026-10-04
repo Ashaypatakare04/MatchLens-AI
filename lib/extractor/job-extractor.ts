@@ -2,11 +2,11 @@ import { ExtractedJobRequirements, ScoringWeights } from "../types";
 import { normalizeSkill, SKILL_TAXONOMY } from "../normalization/skill-normalizer";
 
 export const DEFAULT_WEIGHTS: ScoringWeights = {
-  skills: 35,
+  skills: 30,
   experience: 25,
-  education: 10,
+  responsibilities: 20,
   projects: 15,
-  responsibilities: 15,
+  education: 10,
 };
 
 /**
