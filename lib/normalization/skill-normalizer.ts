@@ -284,7 +284,7 @@ export function matchSkillAgainstCandidate(
     matchType: "none",
     matchedSkillName: "",
     confidence: 0,
-    evidence: `No direct or transferable evidence found for "${targetSkill}" in resume`,
+    evidence: `No supporting evidence found in resume for "${targetSkill}".`,
   };
 }
 

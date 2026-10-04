@@ -77,10 +77,10 @@ export default function TestSuitePage() {
             </div>
             <div>
               <div className="text-xl font-bold text-slate-900 dark:text-white">
-                {totalPassed} / {tests.length || 12} Tests Passing (100% Robustness)
+                {totalPassed} / {tests.length || 12} Edge Case Tests Passing
               </div>
               <p className="text-xs text-slate-500">
-                Verified against hackathon edge case specifications
+                Automated validation across 12 document format, anomaly &amp; reliability scenarios
               </p>
             </div>
           </div>

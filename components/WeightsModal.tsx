@@ -40,6 +40,24 @@ export function WeightsModal({
     setWeights({ ...DEFAULT_WEIGHTS });
   };
 
+  const handleNormalize = () => {
+    if (total === 0) return;
+    const factor = 100 / total;
+    const normSkills = Math.round(weights.skills * factor);
+    const normExp = Math.round(weights.experience * factor);
+    const normResp = Math.round(weights.responsibilities * factor);
+    const normProj = Math.round(weights.projects * factor);
+    const normEdu = 100 - (normSkills + normExp + normResp + normProj);
+
+    setWeights({
+      skills: Math.max(0, normSkills),
+      experience: Math.max(0, normExp),
+      responsibilities: Math.max(0, normResp),
+      projects: Math.max(0, normProj),
+      education: Math.max(0, normEdu),
+    });
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
@@ -133,13 +151,23 @@ export function WeightsModal({
         </div>
 
         <div className="flex items-center justify-between pt-2">
-          <button
-            onClick={handleReset}
-            className="flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-3 py-1.5 rounded border border-slate-200 dark:border-slate-800"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Defaults</span>
-          </button>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleReset}
+              className="flex items-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white px-2.5 py-1.5 rounded border border-slate-200 dark:border-slate-800"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Defaults</span>
+            </button>
+            {total !== 100 && (
+              <button
+                onClick={handleNormalize}
+                className="flex items-center space-x-1 text-xs text-indigo-600 dark:text-indigo-400 font-semibold px-2.5 py-1.5 rounded border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+              >
+                <span>Normalize to 100%</span>
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center space-x-2">
             <button

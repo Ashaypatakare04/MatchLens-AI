@@ -57,7 +57,7 @@ export function InconsistencyCard({ inconsistency }: InconsistencyCardProps) {
                     : "bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
                 }`}
               >
-                Requires Verification
+                Potential Inconsistency • Requires Verification
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-mono">

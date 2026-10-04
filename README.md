@@ -1,143 +1,145 @@
-# MatchLens-AI — Evidence-Backed AI Resume & Job Matching System
+# MatchLens AI — Evidence-Backed Candidate Matching System
 **ALGOTHON’26 — Track ALG-AI-01: AI Resume & Job Matching System**
 
-> *"Not just keyword matching — evidence-backed, explainable candidate ranking with inconsistency detection."*
+> **MatchLens AI — Evidence-backed candidate matching for faster, more trustworthy hiring.**  
+> *MatchLens doesn't just rank candidates. It explains the evidence behind every match and flags claims that require verification.*
 
 ---
 
-## 1. Executive Summary & Problem
+## 1. Problem
 
-Technical recruiters receive hundreds of resumes for every engineering opening. Legacy Applicant Tracking Systems (ATS) rely on crude keyword filters that reward keyword-stuffed resumes, penalize qualified candidates with transferable skills, hallucinate arbitrary confidence percentages, and completely overlook timeline discrepancies or exaggerated claims.
-
-**MatchLens-AI** is a purpose-built recruiter workflow platform that replaces black-box parsers with a transparent, hybrid AI matching engine. It parses messy multi-format resumes, normalizes technical competencies, evaluates candidates across 5 weighted dimensions, flags suspicious or contradictory claims without accusatory labels, and provides grounded resume citations for every single score.
+Recruiters receive hundreds of resumes for a single role. Traditional Applicant Tracking Systems (ATS) rely on naive keyword filters that reward keyword-stuffed resumes, penalize qualified candidates with transferable skills, hallucinate arbitrary confidence percentages, and completely overlook timeline discrepancies or exaggerated claims.
 
 ---
 
-## 2. Core Recruiter Workflow
+## 2. Solution
 
-```mermaid
-flowchart LR
-    A[1. Create Job Spec] --> B[2. Extract & Edit Criteria]
-    B --> C[3. Upload Resumes]
-    C --> D[4. Multi-Stage AI Pipeline]
-    D --> E[5. Score & Rank Dashboard]
-    E --> F[6. Inspect Grounded Citations]
-    E --> G[7. Compare 2-4 Side-by-Side]
-    F --> H[8. Human Recruiter Decision]
+**MatchLens AI** is an evidence-backed candidate matching and recruiter intelligence platform. It analyzes resumes against structured job requirements, explains the exact resume proof behind every score, detects potential inconsistencies (such as unsupported skill claims, date overlaps, and tenure mismatches), and provides transparent, configurable scoring with human-in-the-loop decision tracking.
+
+---
+
+## 3. Core Features
+
+- **Multi-Format Resume Upload**: Drag-and-drop parsing for PDF, DOCX, and TXT documents.
+- **Job Requirement Extraction**: Automatically extracts required skills, preferred skills, minimum experience, education requirements, and core responsibilities from unstructured job descriptions.
+- **Interactive Requirement Fine-Tuning**: Recruiters can edit, add, or remove requirement pills before starting evaluation.
+- **Information Extraction & Normalization**: Canonicalizes skill aliases (`React.js` $\to$ `React`, `PostgreSQL` $\to$ `PostgreSQL`) and maps transferable skills (Angular/Vue $\to$ React).
+- **Candidate Scoring & Ranking**: Generates transparent matching scores out of 100 across 5 configurable dimensions.
+- **Evidence-Backed Explanations**: Every skill match and experience claim links directly to extracted resume snippets with source section and evidence strength indicators (*Strong*, *Moderate*, *Limited*).
+- **Search & Multi-Dimensional Filtering**: Search by name, skill, or company; filter by score thresholds, recommendations, inconsistency flags, and recruiter decisions.
+- **Side-by-Side Candidate Comparison**: Compare 2–4 candidates simultaneously with objective criteria-based ranking explanations.
+- **Potential Inconsistency Detection (ALG-AI-01 Bonus)**:
+  - *Unsupported skill claims* (e.g., claiming "Expert in Kubernetes" without projects or roles).
+  - *Possible overlapping employment dates* (concurrent full-time roles).
+  - *Experience claim verification* (stated summary years exceeding extracted timeline).
+- **Human-in-the-Loop Decision Tracking**: Distinct separation between AI recommendations and human recruiter actions (*Shortlist*, *Maybe*, *Reject*, and interview notes).
+- **Automated Reliability Test Suite**: Integrated runner testing 12 real edge cases.
+
+---
+
+## 4. Hybrid AI + Deterministic Architecture
+
+MatchLens AI is deliberately designed with a clear separation between its AI/semantic layer and its deterministic computation layer. **The final candidate score is never arbitrarily decided by an LLM.**
+
+```
+Recruiter
+   │
+   ▼
+Next.js Web Application
+   │
+   ▼
+Job / Resume Input Layer
+   │
+   ▼
+Document Extraction (PDF via unpdf, DOCX via mammoth, TXT)
+   │
+   ▼
+Information Normalization (Skill taxonomy & chronological timeline resolver)
+   │
+   ├── AI / Semantic Analysis
+   │     ├── Job requirement extraction
+   │     ├── Resume semantic comprehension
+   │     ├── Transferable skills mapping
+   │     └── Grounded explanation narrative
+   │
+   ├── Matching Engine
+   │     ├── Skill Matching (exact, synonym, transferable)
+   │     ├── Experience Analysis (verified non-overlapping tenure)
+   │     ├── Responsibility Alignment
+   │     ├── Evidence Retrieval (snippet citation logging)
+   │     └── Consistency Checks (claim vs evidence verification)
+   │
+   ▼
+Deterministic Scoring Layer (Configurable weighted sum formula)
+   │
+   ▼
+Ranked Candidates Dashboard
+   │
+   ▼
+Evidence + Explanation View
+   │
+   ▼
+Recruiter Decision (Shortlist / Maybe / Reject + Notes)
 ```
 
-1. **Create Job Spec**: Enter role title, company, work mode, and paste the full job description.
-2. **Extract & Edit Criteria**: System automatically extracts required skills, preferred skills, minimum experience, education, and responsibilities. Recruiters can edit or add pills before analysis begins.
-3. **Upload Resumes**: Drag-and-drop multiple resumes in **PDF, DOCX, or TXT** format.
-4. **Multi-Stage AI Pipeline**: Real-time progress tracker: Uploading → Extracting → Normalizing → Analyzing → Matching → Consistency Checking → Grounded Explanation.
-5. **Score & Rank**: View ranked candidates with overall match scores, dimension breakdowns, anomaly warnings, and recommendation badges.
-6. **Inspect Grounded Citations**: Drill down into 14 deep inspection sections with exact quote citations from the resume.
-7. **Compare Side-by-Side**: Select 2–4 candidates to compare criteria matrices with transparent ranking rationales.
-8. **Human Recruiter Decision**: Record recruiter decisions (*Shortlisted*, *Rejected*, *Maybe*, *Unreviewed*) and custom interview notes.
+### Architectural Layer Responsibilities
 
----
-
-## 3. System Architecture Diagram
-
-```mermaid
-flowchart TD
-    User([Recruiter]) --> WebApp[Next.js 16 Web Application / Dashboard]
-    WebApp --> APILayer[Upload & REST API Layer]
-    
-    subgraph Document Processing Layer
-        APILayer --> DocParser[Document Parser Router]
-        DocParser --> PDFEngine[PDF Parser - unpdf / PDF.js]
-        DocParser --> DOCXEngine[DOCX Parser - Mammoth.js]
-        DocParser --> TXTEngine[Text Sanitizer & Messy Layout Normalizer]
-        DocParser --> HashEngine[SHA-256 Hash Duplicate Detector]
-    end
-
-    subgraph Extraction & Normalization
-        DocParser --> ResumeExtractor[Candidate Profile Extractor]
-        DocParser --> JobExtractor[Job Requirement Extractor]
-        ResumeExtractor --> SkillTaxonomy[Skill Taxonomy & Normalization Engine]
-        ResumeExtractor --> TimelineEngine[Chronological Date & Timeline Calculator]
-    end
-
-    subgraph Matching & Intelligence Engine
-        JobExtractor --> MatchEngine[Matching Engine]
-        ResumeExtractor --> MatchEngine
-        SkillTaxonomy --> MatchEngine
-        TimelineEngine --> MatchEngine
-        
-        MatchEngine --> RuleMatch[Rule-Based Syntactic Matcher]
-        MatchEngine --> SemanticMatch[Transferable Skills Graph]
-        MatchEngine --> ExpAnalyzer[Tenure & Non-Overlapping Timeline Analyzer]
-        MatchEngine --> ConsistencyChecker["ALG-AI-01 Bonus: Inconsistency & Claim Detector"]
-    end
-
-    subgraph Deterministic Scoring & Explanation
-        MatchEngine --> ScoringEngine[Configurable Weighted Scoring Layer]
-        ScoringEngine --> CitationsLayer[Evidence Citation & Quality Assigner]
-        CitationsLayer --> LLMEnrichment["Grounded Rationale Generator (Gemini 2.5 Flash / Local Hybrid)"]
-    end
-
-    subgraph Persistence & Visualization
-        LLMEnrichment --> Store[(Persistent Store - .data/db.json)]
-        Store --> RecruiterDashboard[Recruiter Command Center & Candidates Table]
-        Store --> CompareMatrix[Side-by-Side Candidate Matrix]
-        Store --> DecisionHub[Recruiter Decision & Export Hub]
-    end
-```
-
----
-
-## 4. Key Differentiators & Features
-
-### A. Grounded Citations (Evidence-First AI)
-Every conclusion is tied to verified resume text:
-- **Fact**: `"React — listed under Technical Skills"` *(Strong Evidence)*
-- **Computed Metric**: `"6.2 years cumulative experience derived from employment history across 2 positions"` *(Strong Evidence)*
-- **Transferable Rationale**: `"Candidate demonstrates Angular expertise; SPA reactive component knowledge translates to React"` *(Moderate Evidence)*
-
-### B. ALG-AI-01 Bonus: Inconsistency & Contradiction Detection
-Rather than blindly awarding points for keywords in resumes, the system flags discrepancies using objective, neutral verification language:
-1. **Unsupported Skill Claim**: Flags when a candidate claims to be an *"Expert in Kubernetes"* or *"Principal Cloud Architect"* in their summary, but has zero projects, role duties, or certifications substantiating production depth.
-2. **Possible Overlapping Employment Dates**: Detects concurrent full-time employment dates (e.g. *Company A: Jan 2022 – Dec 2023* vs *Company B: Apr 2022 – Aug 2024*) and advises the recruiter to check for concurrent consulting or typographic errors.
-3. **Experience Mismatch**: Detects when a summary claims *"8+ years building enterprise software"*, but the graduation date and extracted timeline sum to 2.8 years.
-
-### C. Transparent Configurable Scoring Formula
-No fabricated confidence percentages (e.g., *"99% hiring match"*). Scores are explicit matching indicators out of 100 calculated from 5 configurable weights:
-- **Required Skills** (Default: 35%)
-- **Experience Tenure** (Default: 25%)
-- **Job Responsibilities Alignment** (Default: 15%)
-- **Relevant Projects** (Default: 15%)
-- **Education & Degree Match** (Default: 10%)
-
-Recruiters can adjust sliders on the fly, click **Apply & Recalculate**, and see rankings update instantly.
-
-### D. Side-by-Side Candidate Comparison
-Recruiters can select 2 to 4 candidates to view a synchronized comparison matrix. The system generates an objective criteria comparison explaining why Candidate A ranks above Candidate B based on the configured job weights.
-
-### E. Human-in-the-Loop Decision Tracking
-The AI never makes hiring decisions. It provides an `AI Recommendation` (*Strong Match*, *Consider*, *Review Required*, *Low Alignment*) alongside a distinct `Recruiter Decision` (*Shortlisted*, *Rejected*, *Maybe*, *Unreviewed*) and custom interview notes.
+| Layer | Responsibility | Why It's Separated |
+|---|---|---|
+| **AI / Semantic Layer** | • Requirement extraction from job description<br>• Resume layout understanding<br>• Semantic relevance & transferable skills graph<br>• Grounded executive explanation generation | Best suited for natural language comprehension and qualitative synthesis. |
+| **Deterministic Layer** | • Score calculation from configured weights<br>• Chronological timeline & tenure math<br>• Date overlap detection (calendar math)<br>• SHA-256 duplicate resume detection<br>• Rule-based consistency audits | Eliminates black-box scoring, hallucinations, and non-reproducible ranking changes. |
 
 ---
 
 ## 5. Technology Stack
 
 - **Framework**: Next.js 16 (App Router, Turbopack, React 19)
-- **Language**: TypeScript 5 (Strict typing across all models)
+- **Language**: TypeScript 5 (Strict type checking across all data contracts)
 - **Styling**: Tailwind CSS v4, Lucide React Icons
-- **Document Parsers**: `unpdf` (Canvas-free edge/node PDF extractor), `mammoth` (DOCX extractor)
-- **AI / LLM Integration**: Google Gemini 2.5 Flash (`@google/genai`) with seamless offline deterministic fallback
-- **Data Persistence**: File-backed local database (`.data/db.json`) with in-memory caching
-- **Testing**: Automated 12-scenario Edge Cases & Reliability test suite
+- **Document Parsers**:
+  - `unpdf` (Canvas-free edge/node PDF extractor)
+  - `mammoth` (Pure JS DOCX document parser)
+- **AI / LLM Layer**: Google Gemini 2.5 Flash (`@google/genai`) with seamless local hybrid deterministic fallback
+- **Persistence**: File-backed local storage (`.data/db.json`) with in-memory caching
+- **Testing**: Integrated 12-scenario Edge Cases & Reliability test suite (`/test-suite`)
 
 ---
 
-## 6. Getting Started & Installation
+## 6. AI Components & External APIs
 
-### Prerequisites
-- Node.js v18+ (tested on Node v22.21)
-- npm v9+
+- **Google Gemini 2.5 Flash API (`@google/genai`)**:
+  - Used optionally for qualitative recruiter summary enrichment and tailored technical screening questions when `GEMINI_API_KEY` is provided.
+- **Local Hybrid Deterministic Engine (Zero External Dependencies)**:
+  - If no external API key is set, the system automatically uses its local deterministic NLP taxonomy and matching engine. All scoring, parsing, consistency checks, citations, and comparisons run offline with zero failure risk.
 
-### 1. Clone & Install
+---
+
+## 7. Demo Dataset
+
+The application includes a pre-seeded, realistic demo dataset designed for a complete 2–4 minute judge demonstration:
+
+- **1 Realistic Requisition**: *Senior Full-Stack & Cloud Platform Engineer* at *CloudScale Technologies*.
+  - Required Skills: React, TypeScript, Node.js, PostgreSQL, Docker (5+ years exp).
+  - Preferred Skills: Kubernetes, AWS, GraphQL, Tailwind CSS, Redis.
+- **10 Synthetic Candidate Resumes** exhibiting diverse profiles:
+  1. **Alex Rivera** (Score: 94/100): Exceptional match, satisfies all 5 required skills, 6.2 yrs verified tenure.
+  2. **Elena Rostova** (Score: 87/100): Strong match, Master's degree, verified 5.1 yrs tenure.
+  3. **David Chen** (Score: 77/100): Strong transferable skills (Angular/Vue credited toward React; MySQL toward PostgreSQL).
+  4. **Marcus Brody** (Score: 56/100): Missing required skills (strong frontend UI, lacks Node.js and PostgreSQL).
+  5. **Sarah Jenkins** (Score: 61/100): **Unsupported skill claim** (claims "Principal Kubernetes Architect", but 0 Kubernetes projects or duties).
+  6. **Vikram Malhotra** (Score: 71/100): **Possible overlapping employment dates** (20-month full-time overlap between Acrobatix and BluePeak).
+  7. **Jessica Taylor** (Score: 67/100): **Experience claim requires verification** (claims 8+ years experience, timeline covers 2.8 years).
+  8. **Jordan Blake** (Score: 78/100): **Messy resume layout** (unconventional ASCII borders and non-standard delimiters parsed cleanly).
+  9. **Carlos Gomez** (Score: 42/100): Junior candidate (1.2 years experience against 5+ year requirement).
+  10. **Amina Al-Mansoor** (Score: 79/100): Cloud & distributed systems specialist with transferable backend background.
+
+*Note: All demo candidates and company names are synthetic data created for evaluation purposes.*
+
+---
+
+## 8. Setup & Quickstart Instructions
+
+### 1. Installation
 ```bash
 git clone https://github.com/Ashaypatakare04/MatchLens-AI.git
 cd MatchLens-AI
@@ -145,10 +147,10 @@ npm install
 ```
 
 ### 2. Environment Variables (Optional)
-Create a `.env.local` file:
+Create `.env.local` in the project root:
 ```env
 # Optional: Connect Gemini 2.5 Flash for live LLM enrichment.
-# If omitted, MatchLens-AI runs with 100% functionality using its built-in hybrid deterministic engine!
+# If omitted, MatchLens AI runs fully using its built-in hybrid deterministic engine!
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
@@ -166,70 +168,68 @@ npm start
 
 ---
 
-## 7. 2–4 Minute Hackathon Demo Story
-
-Follow these steps for a complete demonstration for hackathon judges:
+## 9. Recommended 2–4 Minute Judge Demo Sequence
 
 1. **Landing Page (`/`)**:
-   - Highlight the value proposition: *"Turn hundreds of resumes into an evidence-backed shortlist."*
-   - Point out the interactive miniature product preview.
-2. **Load Demo Dataset**:
-   - Click the top right **"Load Demo Dataset"** button on the navbar.
-   - It instantly seeds the **Senior Full-Stack & Cloud Platform Engineer** role with **10 realistic candidate resumes**.
+   - Review value proposition: *"Evidence-backed candidate matching for faster, more trustworthy hiring."*
+   - Observe the 5-stage live pipeline preview (*Job Requirements $\to$ Candidate Analysis $\to$ Ranked Shortlist $\to$ Grounded Evidence $\to$ Inconsistency Flags*).
+2. **One-Click Demo Loading**:
+   - Click **"Load Demo Dataset"** in the top navbar.
+   - Instantly loads the CloudScale job and 10 realistic candidates.
 3. **Ranked Candidate Dashboard (`/jobs/.../candidates`)**:
-   - Observe the rankings: **Alex Rivera** ranks #1 (94/100, 6.2 yrs verified tenure, all 5 required skills matched).
-   - Point out **Elena Rostova** #2 (87/100, Master's degree).
-   - Point out **David Chen** #3 (77/100, demonstrates transferable skills from Angular/Vue and MySQL).
-4. **ALG-AI-01 Bonus Inspection**:
-   - Notice the amber badge `⚠ Flagged Claim` on **Sarah Jenkins** and **Vikram Malhotra**.
-   - Click **Inspect** on **Sarah Jenkins**: View the *Unsupported skill claim* flag (claimed "Principal Kubernetes Architect", but 0 Kubernetes projects or enterprise duties in resume).
-   - Click **Inspect** on **Vikram Malhotra**: View the *Possible overlapping employment dates* flag (20 months overlapping full-time tenure between Acrobatix and BluePeak).
-   - Click **Inspect** on **Jessica Taylor**: View the *Experience claim requires verification* flag (claimed 8+ years experience, but graduation is 2022 with 2.8 years timeline).
-5. **Score Transparency & Configurable Weights**:
-   - Click **"Adjust Weights"**. Slide Experience up to 40% and click **Apply & Recalculate**. Watch scores recompute deterministically!
-   - Expand *"How this score was calculated"* on the candidate file to view the exact math.
+   - Review top rankings: Alex Rivera #1 (94/100), Elena Rostova #2 (87/100), David Chen #3 (77/100 with transferable skill credit).
+   - Point out the amber badges `⚠ Flagged Claim` on Sarah Jenkins and Vikram Malhotra.
+4. **Deep Candidate Inspection (`/jobs/.../candidates/[id]`)**:
+   - Open **Alex Rivera**: Scannable in 15 seconds. Review Overall Match (94/100), Strong Matches, Score Breakdown, Formula Mechanics, Grounded Evidence quotes with source sections, and Experience Timeline.
+   - Open **Sarah Jenkins**: View the *Potential Inconsistency: Limited supporting evidence for Kubernetes expertise* card.
+   - Open **Vikram Malhotra**: View the *Possible overlapping employment dates* card (20-month full-time overlap).
+   - Open **Jessica Taylor**: View the *Experience claim requires verification* card (8+ years stated vs 2.8 years timeline).
+5. **Configurable Weight Recalculation**:
+   - Click **"Adjust Weights"**. Slide Experience from 25% to 40%. Click **"Normalize to 100%"**, then **"Apply & Recalculate"**.
+   - Watch candidate scores deterministically update in real-time.
 6. **Side-by-Side Comparison (`/jobs/.../compare`)**:
-   - Check the boxes for **Alex Rivera**, **Elena Rostova**, and **David Chen**.
-   - Click **"Compare Selected Candidates"**.
-   - Review the criteria matrix and transparent ranking rationale.
-7. **Make Decision**:
-   - Mark Alex Rivera as **"Shortlisted"** and add interview notes.
-8. **Edge Cases & Reliability Suite (`/test-suite`)**:
-   - Navigate to **Edge Cases & Reliability**.
-   - Click **"Re-Run All 12 Tests"** to show 100% pass rates across empty documents, duplicates, scanned PDFs, messy formats, and anomalies.
+   - Check boxes for Alex Rivera, Elena Rostova, and David Chen.
+   - Click **"Compare Selected Candidates"** to inspect the synchronized matrix with criteria-based ranking explanations.
+7. **Human-in-the-Loop Decision**:
+   - Toggle recruiter decision to **"Shortlisted"** and save an interview note.
+8. **Automated Reliability Test Suite (`/test-suite`)**:
+   - Open `/test-suite` and click **"Re-Run All 12 Tests"** to demonstrate automated validation across all 12 edge cases.
 
 ---
 
-## 8. Automated Edge Cases & Reliability Suite
+## 10. Automated Edge Cases & Reliability Suite
 
-MatchLens-AI includes automated test runners for all 12 edge cases:
+The platform includes real automated test cases for all 12 edge case scenarios:
 
-| # | Test Scenario | Input Document | Result | Detected Flags / Behavior |
+| # | Test Scenario | Input Document | Result | Behavior & Flag Verified |
 |---|---|---|---|---|
 | 1 | **Perfect Candidate** | Full stack resume with all skills | **PASS** | Score 94/100, 0 missing requirements |
-| 2 | **Poor Candidate** | Retail store manager | **PASS** | Score 24/100, Low Alignment badge |
+| 2 | **Poor Candidate** | Retail store manager | **PASS** | Score 24/100, Low Alignment recommendation |
 | 3 | **Missing Required Skill** | Frontend UI dev lacking Node/Postgres | **PASS** | Caps skill score, flags missing Node.js & Postgres |
 | 4 | **Transferable Skills** | Angular/Vue & MySQL engineer | **PASS** | Transferable skill credit + architecture rationale |
-| 5 | **Messy Resume** | ASCII delimiters, irregular bullets | **PASS** | Clean text normalization, zero parser crashes |
-| 6 | **Scanned / Low-Text** | Image scan placeholder | **PASS** | Flags low-confidence extraction warning |
+| 5 | **Messy Resume** | ASCII delimiters, non-standard layout | **PASS** | Normalized text extraction, zero parser crashes |
+| 6 | **Scanned / Low-Text** | Document with no text layer | **PASS** | Flags low-confidence extraction warning |
 | 7 | **Missing Education** | Self-taught engineer with no degree | **PASS** | States *"Not found in resume"*, does not fabricate degree |
 | 8 | **Contradictory Dates** | Overlapping full-time dates | **PASS** | Flags *"Possible overlapping employment dates"* |
 | 9 | **Unsupported Claim** | Claims K8s Architect with 0 evidence | **PASS** | Flags *"Unsupported skill claim"* |
 | 10 | **Duplicate Resume** | Identical document uploaded twice | **PASS** | Detected via cryptographic SHA-256 hash |
-| 11 | **Empty Document** | 0-byte file | **PASS** | Rejected with explicit error message |
-| 12 | **Invalid File** | Executable/binary format | **PASS** | Rejected with clear supported formats notice |
+| 11 | **Empty Document** | 0-byte file | **PASS** | Rejected with actionable recruiter guidance |
+| 12 | **Invalid Format** | Binary/unsupported file | **PASS** | Rejected with clear supported formats notice |
 
 ---
 
-## 9. Limitations & Future Roadmap
+## 11. Honest Disclosures & System Limitations
 
-- **OCR for Complex Scans**: Current implementation handles text-based PDFs and DOCX files natively with fallback detection for scanned documents. Future iterations can integrate Tesseract.js / AWS Textract for scanned physical paper resumes.
-- **Multi-Role Matching**: Enable cross-matching a single uploaded resume across multiple active open requisitions simultaneously.
-- **ATS Webhook Integration**: Two-way synchronization with Greenhouse, Lever, and Workday APIs.
+- **Decision-Support Tool, Not Autonomous Decision-Maker**: MatchLens AI assists human recruiters; it does not and should not make autonomous hiring decisions.
+- **Document Structure Dependency**: Extraction fidelity depends on readable text layers. Non-OCR scans of physical paper documents yield low-confidence flags.
+- **Inconsistencies Are Incomplete Inferences**: Flags highlight potential discrepancies for recruiter verification during screens, not definitive evidence of candidate deception.
+- **Semantic Similarity $\neq$ Actual Capability**: Transferable skill credits indicate conceptual overlap (e.g. Angular to React), not verified production fluency.
 
 ---
 
-## 10. External APIs & AI Models
+## 12. Future Roadmap
 
-- **Google Gemini 2.5 Flash**: Optional LLM reasoning layer used for qualitative interview question generation and summary enrichment when `GEMINI_API_KEY` is provided.
-- **Built-in Hybrid Engine**: Deterministic taxonomy parser, chronological timeline resolver, and semantic transferable skill graph running entirely local with zero cloud dependencies.
+- **Advanced Multi-Language OCR**: Integration with AWS Textract or Tesseract for non-digital scanned physical documents.
+- **Cross-Requisition Matching**: Match a single uploaded resume across multiple active open positions simultaneously.
+- **ATS Webhook Connectors**: Two-way synchronization with Greenhouse, Lever, and Workday APIs.
+- **Recruiter Feedback Learning**: Fine-tuning skill weight preferences based on recruiter shortlist actions over time.

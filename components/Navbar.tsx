@@ -55,10 +55,10 @@ export function Navbar() {
             </div>
             <div className="flex flex-col">
               <span className="font-bold text-slate-900 dark:text-white tracking-tight leading-none text-base">
-                MatchLens<span className="text-indigo-600 dark:text-indigo-400">.AI</span>
+                MatchLens <span className="text-indigo-600 dark:text-indigo-400">AI</span>
               </span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-wider uppercase mt-0.5">
-                ALGOTHON&apos;26 • ALG-AI-01
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium tracking-tight mt-0.5">
+                Evidence-backed candidate matching
               </span>
             </div>
           </Link>
@@ -89,7 +89,7 @@ export function Navbar() {
         <div className="flex items-center space-x-3">
           <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700">
             <Cpu className="w-3 h-3 text-emerald-500 animate-pulse" />
-            <span>Hybrid Scoring Engine</span>
+            <span>Hybrid AI + Deterministic Engine</span>
           </div>
 
           <button

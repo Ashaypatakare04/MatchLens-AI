@@ -81,9 +81,9 @@ export function checkProfileConsistency(
             severity: "medium",
             flag: "Unsupported skill claim",
             claim: `Candidate states: "${fullClaim}"`,
-            evidence: `The resume mentions "${claimedDomain}" in headline/summary, but lacks corresponding detailed project implementation, company achievements, or accredited certifications demonstrating applied production mastery.`,
+            evidence: `Limited supporting evidence for ${match[1]} expertise. The resume highlights this claim in headline/summary, but lacks corresponding production project descriptions, role duties, or accredited certifications.`,
             recommendation:
-              `Ask candidate in technical interview for specific production examples, architecture decisions, and hands-on depth with ${match[1]}.`,
+              `Verify hands-on production examples, architecture decisions, and actual depth with ${match[1]} during technical screen.`,
           });
         }
       }

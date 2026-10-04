@@ -206,7 +206,7 @@ export default function RecruiterDashboard() {
               <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
                 {totalResumes}
               </div>
-              <span className="text-[11px] text-slate-400">100% of pipeline</span>
+              <span className="text-[11px] text-slate-400">Uploaded documents</span>
             </div>
 
             <div className="p-4 rounded-lg bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 space-y-1">

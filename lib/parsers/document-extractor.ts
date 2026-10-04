@@ -24,7 +24,7 @@ export async function extractDocumentFromBuffer(
   fileName: string
 ): Promise<ExtractedDocumentResult> {
   if (!buffer || buffer.length === 0) {
-    throw new Error(`File "${fileName}" is empty (0 bytes). Please upload a valid document.`);
+    throw new Error(`File "${fileName}" is empty (0 bytes). Please upload a valid document containing resume text.`);
   }
 
   const fileHash = computeBufferHash(buffer);
@@ -50,7 +50,7 @@ export async function extractDocumentFromBuffer(
     text = buffer.toString("utf-8");
   } else {
     throw new Error(
-      `Unsupported file extension ".${ext}" for "${fileName}". Only PDF, DOCX, and TXT files are accepted.`
+      `Unsupported file format ".${ext}" for "${fileName}". Please upload candidate resumes in standard PDF, DOCX, or TXT format.`
     );
   }
 
