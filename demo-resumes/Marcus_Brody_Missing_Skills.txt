@@ -1,0 +1,16 @@
+MARCUS BRODY
+marcus.brody.ui@gmail.com | (312) 441-2091 | Chicago, IL
+
+SUMMARY:
+Lead Frontend & UI Developer with 6 years experience specializing in React design systems, accessibility, and modern responsive CSS.
+
+EXPERIENCE:
+Kinetic Interactive | Lead UI Developer | Mar 2020 – Present
+- Built sleek UI systems with React, TypeScript, and Tailwind CSS.
+- Optimized web vitals and accessible design tokens.
+
+SKILLS:
+React, TypeScript, Tailwind CSS, HTML5, CSS3, Figma, Jest
+
+EDUCATION:
+Columbia College Chicago - B.A. Interactive Media

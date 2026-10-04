@@ -1,0 +1,14 @@
+*** RESUME ***
+JORDAN BLAKE // Denver, CO // jordan.blake99@techpost.net // (720) 881-2290
+
+~TECH STACK~
+React.js :: TypeScript :: Node JS :: PostgreSQL :: Docker :: AWS Cloud :: Git
+
+>> PAST WORK:
+MileHigh Software Co - Full Stack Developer (Aug 2019 - Present)
+* Programmed in React.js, TypeScript, and Node.js for cloud SaaS.
+* Maintained database instances in PostgreSQL and configured Docker images.
+* Deployed containerized applications to AWS environments.
+
+>> EDUCATION:
+BS Computer Science UC Boulder 2019

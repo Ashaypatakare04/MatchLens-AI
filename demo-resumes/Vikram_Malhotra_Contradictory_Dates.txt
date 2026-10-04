@@ -1,0 +1,17 @@
+VIKRAM MALHOTRA
+vikram.malhotra@techfirm.co | (408) 772-9103 | San Jose, CA
+
+PROFESSIONAL EXPERIENCE:
+BluePeak Dynamics Inc | Senior Software Engineer | Apr 2022 – Aug 2024
+- Lead development of enterprise web systems using TypeScript, React, and Node.js.
+- Containerized workflows using Docker and provisioned cloud infrastructure.
+
+Acrobatix Cloud Corp | Full-Stack Engineer | Jan 2022 – Dec 2023
+- Full-time engineering responsibilities across React frontend and Node.js microservices.
+- Managed PostgreSQL schemas and optimized queries.
+
+EDUCATION:
+San Jose State University | B.S. in Computer Science (2019)
+
+SKILLS:
+React, TypeScript, Node.js, PostgreSQL, Docker, AWS

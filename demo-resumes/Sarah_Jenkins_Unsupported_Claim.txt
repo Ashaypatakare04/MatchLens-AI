@@ -1,0 +1,17 @@
+SARAH JENKINS
+sarah.jenkins.cloud@mail.org | (617) 831-9044 | Boston, MA
+
+HEADLINE & SUMMARY:
+Principal Kubernetes Architect and AI Specialist with deep expertise in distributed orchestration, React, TypeScript, and Node.js.
+
+WORK EXPERIENCE:
+Starlight Digital Studio | Frontend Web Developer | Jun 2021 – Present
+- Built client landing sites and marketing pages with React and TypeScript.
+- Created small Node.js build scripts and local Docker compose files for development testing.
+- Handled UI asset optimization.
+
+SKILLS:
+React, TypeScript, Node.js, Docker, Kubernetes
+
+EDUCATION:
+Northeastern University | B.S. in Information Technology (2021)

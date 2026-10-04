@@ -1,0 +1,16 @@
+CARLOS GOMEZ
+carlos.gomez.code@gmail.com | (305) 551-7788 | Miami, FL
+
+OBJECTIVE:
+Junior developer with 1+ year experience seeking junior full-stack opportunities.
+
+WORK HISTORY:
+Breeze Digital Labs | Junior Web Developer | Aug 2023 – Present
+- Fixed frontend bugs in React and JavaScript.
+- Maintained web styles.
+
+SKILLS:
+React, JavaScript, HTML5, CSS3, Git
+
+EDUCATION:
+Florida International University - B.S. Information Systems (2023)

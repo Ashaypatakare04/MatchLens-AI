@@ -1,0 +1,19 @@
+AMINA AL-MANSOOR
+amina.almansoor@cloudeng.tech | (650) 902-1144 | Palo Alto, CA
+
+SUMMARY:
+Senior Platform & Full-Stack Cloud Engineer with 5+ years building containerized microservices, distributed pipelines, and responsive React web tools.
+
+EXPERIENCE:
+Helios Distributed Systems | Senior Platform & Cloud Engineer | Oct 2021 – Present
+- Built distributed backend systems and internal React admin panels.
+- Automated Kubernetes container orchestration and PostgreSQL cluster maintenance.
+
+StrataCore Labs | Cloud Infrastructure Engineer | Jul 2019 – Sep 2021
+- Deployed Dockerized microservices and maintained high availability.
+
+EDUCATION:
+Stanford University | B.S. Computer Engineering (2019)
+
+SKILLS:
+React, TypeScript, Docker, Kubernetes, PostgreSQL, AWS, Python, Redis, CI/CD

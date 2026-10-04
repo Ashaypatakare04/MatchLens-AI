@@ -1,0 +1,17 @@
+JESSICA TAYLOR
+jessica.taylor.eng@gmail.com | (646) 391-8820 | New York, NY
+
+PROFESSIONAL SUMMARY:
+Accomplished software engineer with 8+ years of hands-on professional experience building enterprise web systems, architecting React UIs, Node.js backends, and PostgreSQL databases.
+
+WORK HISTORY:
+Gotham Tech Labs | New York, NY
+Software Engineer | Jun 2022 – Present
+- Developed web features using React, TypeScript, Node.js, and PostgreSQL.
+- Maintained Docker configurations and unit tests.
+
+EDUCATION:
+New York University | Bachelor of Science in Software Engineering (Class of 2022)
+
+SKILLS:
+React, TypeScript, Node.js, PostgreSQL, Docker, Tailwind CSS

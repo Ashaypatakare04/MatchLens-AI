@@ -1,0 +1,34 @@
+ALEX RIVERA
+alex.rivera.dev@gmail.com | (415) 892-4102 | San Francisco, CA
+LinkedIn: linkedin.com/in/alexrivera-tech | GitHub: github.com/alexrivera-dev
+
+SUMMARY:
+Results-driven Senior Full-Stack Engineer with 6+ years of hands-on experience building fault-tolerant distributed web applications, data dashboards, and cloud-native microservices using React, TypeScript, Node.js, and PostgreSQL.
+
+SKILLS:
+Frontend: React, TypeScript, Next.js, Tailwind CSS, Redux Toolkit
+Backend: Node.js, Express, NestJS, REST APIs, GraphQL
+Databases & Cache: PostgreSQL, Redis, MongoDB
+DevOps & Cloud: Docker, Kubernetes, AWS (ECS, S3, RDS), CI/CD, GitHub Actions
+
+WORK EXPERIENCE:
+Nexus Platform Inc. | San Francisco, CA
+Senior Full-Stack Engineer | Jan 2022 – Present
+- Architected real-time analytics portal utilizing React, TypeScript, and Node.js microservices.
+- Optimized PostgreSQL relational database queries reducing query latencies by 42%.
+- Deployed containerized services with Docker onto Kubernetes clusters in AWS.
+- Mentored 4 engineers and instituted automated PR quality gates.
+
+Vanguard Tech Labs | San Francisco, CA
+Software Engineer | Jun 2018 – Dec 2021
+- Engineered distributed customer-facing dashboard using React and Node.js.
+- Designed PostgreSQL schemas, wrote REST and GraphQL APIs, and configured Docker environments.
+- Handled 5M daily webhook transactions with zero downtime.
+
+EDUCATION:
+University of California, Berkeley
+Bachelor of Science in Computer Science | 2014 – 2018
+
+CERTIFICATIONS:
+- AWS Certified Solutions Architect – Associate (2023)
+- Certified Kubernetes Application Developer (CKAD) (2022)
