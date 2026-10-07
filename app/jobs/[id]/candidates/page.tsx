@@ -502,8 +502,27 @@ export default function CandidateRankingPage() {
                             >
                               {candidate.name}
                             </Link>
-                            <div className="text-[11px] text-slate-500">
-                              {candidate.location} • {candidate.totalExperienceYears} yrs
+                            <div className="flex items-center space-x-1.5 mt-0.5">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded tracking-wide ${
+                                match.skillsAnalysis?.transferableSkills?.length > 0 && match.skillsAnalysis?.requiredMissing?.length > 0
+                                  ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200"
+                                  : match.overallScore >= 80 && match.skillsAnalysis?.requiredMissing?.length === 0
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200"
+                                  : match.overallScore >= 50
+                                  ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                  : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                              }`}>
+                                {match.skillsAnalysis?.transferableSkills?.length > 0 && match.skillsAnalysis?.requiredMissing?.length > 0
+                                  ? "Transferable Match"
+                                  : match.overallScore >= 80 && match.skillsAnalysis?.requiredMissing?.length === 0
+                                  ? "Direct Match"
+                                  : match.overallScore >= 50
+                                  ? "Partial Match"
+                                  : "Low Alignment"}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-1">
+                              {candidate.location} • Total: {candidate.totalExperienceYears} yrs | Relevant: <strong className="text-slate-800 dark:text-slate-200">{match.relevantExperienceYears ?? match.experienceAnalysis?.relevantExperienceYears ?? candidate.totalExperienceYears} yrs</strong>
                             </div>
                             <div className="text-[10px] text-slate-400 truncate max-w-[200px]">
                               {candidate.email}
@@ -646,8 +665,25 @@ export default function CandidateRankingPage() {
                           {candidate.name}
                         </Link>
                         <p className="text-[11px] text-slate-500">
-                          {candidate.location} • {candidate.totalExperienceYears} yrs
+                          {candidate.location} • Total: {candidate.totalExperienceYears} yrs | Relevant: <strong>{match.relevantExperienceYears ?? match.experienceAnalysis?.relevantExperienceYears ?? candidate.totalExperienceYears} yrs</strong>
                         </p>
+                        <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded mt-1 ${
+                          match.skillsAnalysis?.transferableSkills?.length > 0 && match.skillsAnalysis?.requiredMissing?.length > 0
+                            ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-200"
+                            : match.overallScore >= 80 && match.skillsAnalysis?.requiredMissing?.length === 0
+                            ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-200"
+                            : match.overallScore >= 50
+                            ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                            : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                        }`}>
+                          {match.skillsAnalysis?.transferableSkills?.length > 0 && match.skillsAnalysis?.requiredMissing?.length > 0
+                            ? "Transferable Match"
+                            : match.overallScore >= 80 && match.skillsAnalysis?.requiredMissing?.length === 0
+                            ? "Direct Match"
+                            : match.overallScore >= 50
+                            ? "Partial Match"
+                            : "Low Alignment"}
+                        </span>
                       </div>
                     </div>
                     <ScoreBadge score={match.overallScore} size="sm" />

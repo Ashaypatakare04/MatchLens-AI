@@ -7,8 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx --yes tsx scripts/run-edge-cases.ts",
-    "test:edge-cases": "npx --yes tsx scripts/run-edge-cases.ts"
+    "test": "npx --yes tsx scripts/run-edge-cases.ts && npx --yes tsx scripts/run-ai-benchmark.ts",
+    "test:edge-cases": "npx --yes tsx scripts/run-edge-cases.ts",
+    "test:benchmark": "npx --yes tsx scripts/run-ai-benchmark.ts"
   },
   "dependencies": {
     "@google/genai": "^2.27.0",

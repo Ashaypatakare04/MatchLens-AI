@@ -104,7 +104,7 @@ export default function CandidateComparisonPage({
   // Generate objective ranking explanation comparing candidates
   const topCandidate = candidates[0];
   const secondCandidate = candidates[1];
-  const differenceSummary = `According to the configured job weights (${job?.weights.skills}% Skills, ${job?.weights.experience}% Experience, ${job?.weights.responsibilities}% Responsibilities): ${topCandidate.candidate.name} (${topCandidate.match.overallScore}/100) ranks higher primarily because they satisfy ${topCandidate.match.skillsAnalysis.requiredMatched.length}/${job?.requirements.requiredSkills.length} required technical skills and demonstrate ${topCandidate.candidate.totalExperienceYears} years of verified timeline experience, compared to ${secondCandidate.candidate.name} (${secondCandidate.match.overallScore}/100) who has ${secondCandidate.match.skillsAnalysis.requiredMissing.length > 0 ? `missing required skills (${secondCandidate.match.skillsAnalysis.requiredMissing.join(", ")})` : `${secondCandidate.candidate.totalExperienceYears} years tenure`}${secondCandidate.match.potentialInconsistencies.length > 0 ? " and flagged inconsistencies" : ""}.`;
+  const differenceSummary = `According to the configured job weights (${job?.weights.skills}% Skills, ${job?.weights.experience}% Experience, ${job?.weights.responsibilities}% Responsibilities): ${topCandidate.candidate.name} (${topCandidate.match.overallScore}/100) ranks higher primarily because they satisfy ${topCandidate.match.skillsAnalysis.requiredMatched.length}/${job?.requirements.requiredSkills.length} required technical skills and demonstrate ${topCandidate.match.relevantExperienceYears ?? topCandidate.candidate.totalExperienceYears} years of verified relevant engineering experience (out of ${topCandidate.candidate.totalExperienceYears} total cumulative years), compared to ${secondCandidate.candidate.name} (${secondCandidate.match.overallScore}/100) who has ${secondCandidate.match.skillsAnalysis.requiredMissing.length > 0 ? `missing required skills (${secondCandidate.match.skillsAnalysis.requiredMissing.join(", ")})` : `${secondCandidate.match.relevantExperienceYears ?? secondCandidate.candidate.totalExperienceYears} relevant years tenure`}${secondCandidate.match.potentialInconsistencies.length > 0 ? " and flagged inconsistencies" : ""}.`;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100">
@@ -261,7 +261,10 @@ export default function CandidateComparisonPage({
                 {candidates.map(({ candidate, match }) => (
                   <td key={candidate.id} className="p-4 space-y-1">
                     <div className="font-mono font-bold text-slate-900 dark:text-white">
-                      {candidate.totalExperienceYears} years
+                      Total: {candidate.totalExperienceYears} yrs
+                    </div>
+                    <div className="text-[11px] font-semibold text-indigo-600">
+                      Relevant: {match.relevantExperienceYears ?? match.experienceAnalysis.relevantExperienceYears ?? candidate.totalExperienceYears} yrs
                     </div>
                     <span
                       className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${

@@ -11,6 +11,8 @@ import { generateExplainableSummary } from "./explanation-generator";
 
 /**
  * End-to-end pipeline: Evaluates a candidate profile against a job description.
+ * Fully deterministic scoring grounded in real semantic similarity, 5-level evidence,
+ * and relevant experience metrics.
  */
 export function analyzeCandidate(
   candidate: CandidateProfile,
@@ -19,7 +21,7 @@ export function analyzeCandidate(
 ): MatchAnalysis {
   const weights = customWeights || job.weights;
 
-  // 1. Requirements matching
+  // 1. Requirement-level semantic matching & evidence classification
   const {
     skillsResult,
     experienceResult,
@@ -29,12 +31,16 @@ export function analyzeCandidate(
     strongMatches,
     missingRequirements,
     evidenceLog,
+    requirementMatches,
+    totalExperienceYears,
+    relevantExperienceYears,
+    matchingEngine,
   } = matchCandidateAgainstJob(candidate, job);
 
-  // 2. Consistency & Inconsistency Detection (Bonus ALG-AI-01)
+  // 2. Consistency & Inconsistency Detection (ALG-AI-01 Bonus)
   const potentialInconsistencies = checkProfileConsistency(candidate);
 
-  // Add inconsistency warnings to evidenceLog
+  // Add inconsistency verification flags to evidenceLog
   for (const incon of potentialInconsistencies) {
     evidenceLog.push({
       id: `ev-incon-${incon.id}`,
@@ -56,14 +62,15 @@ export function analyzeCandidate(
     weights
   );
 
-  // 4. Grounded AI Explanation & Recommendation
+  // 4. Grounded AI Explanation & Recommendation Narrative
   const { recommendation, explanation } = generateExplainableSummary(
     candidate,
     job,
     skillsResult,
     experienceResult,
     overallScore,
-    potentialInconsistencies
+    potentialInconsistencies,
+    requirementMatches
   );
 
   return {
@@ -77,6 +84,10 @@ export function analyzeCandidate(
     educationAnalysis: educationResult,
     projectAnalysis: projectResult,
     responsibilityAlignment,
+    requirementMatches,
+    totalExperienceYears,
+    relevantExperienceYears,
+    matchingEngine,
     strongMatches,
     missingRequirements,
     potentialInconsistencies,

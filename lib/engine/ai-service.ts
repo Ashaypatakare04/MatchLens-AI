@@ -5,6 +5,7 @@ export interface AIServiceStatus {
   isConfigured: boolean;
   model: string;
   provider: "gemini" | "hybrid_local";
+  statusBadge: string;
 }
 
 export function getAIStatus(): AIServiceStatus {
@@ -12,14 +13,16 @@ export function getAIStatus(): AIServiceStatus {
   if (apiKey && apiKey.trim().length > 0) {
     return {
       isConfigured: true,
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash / text-embedding-004",
       provider: "gemini",
+      statusBadge: "Semantic analysis enabled",
     };
   }
   return {
     isConfigured: false,
-    model: "hybrid-deterministic-nlp",
+    model: "hybrid-local-semantic-projection",
     provider: "hybrid_local",
+    statusBadge: "Semantic API unavailable — using local matching fallback",
   };
 }
 

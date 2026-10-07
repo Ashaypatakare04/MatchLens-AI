@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Layers,
   Sparkles,
@@ -17,8 +17,20 @@ import {
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
+  const [aiStatus, setAiStatus] = useState<string>("Semantic analysis enabled");
   const [isSeeding, setIsSeeding] = useState(false);
   const [seedSuccess, setSeedSuccess] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.status?.statusBadge) {
+          setAiStatus(d.status.statusBadge);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSeedDemo = async () => {
     setIsSeeding(true);
@@ -40,7 +52,8 @@ export function Navbar() {
   const navLinks = [
     { href: "/dashboard", label: "Dashboard", icon: Layers },
     { href: "/jobs/new", label: "Create Job", icon: Briefcase },
-    { href: "/test-suite", label: "Edge Cases & Reliability", icon: ShieldAlert },
+    { href: "/evaluation", label: "AI Evaluation & Benchmark", icon: Sparkles },
+    { href: "/test-suite", label: "Edge Cases", icon: ShieldAlert },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 
@@ -89,7 +102,7 @@ export function Navbar() {
         <div className="flex items-center space-x-3">
           <div className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[11px] text-slate-600 dark:text-slate-300 font-medium border border-slate-200 dark:border-slate-700">
             <Cpu className="w-3 h-3 text-emerald-500 animate-pulse" />
-            <span>Hybrid AI + Deterministic Engine</span>
+            <span>{aiStatus}</span>
           </div>
 
           <button

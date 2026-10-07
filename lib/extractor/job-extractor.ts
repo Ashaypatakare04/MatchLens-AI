@@ -9,6 +9,29 @@ export const DEFAULT_WEIGHTS: ScoringWeights = {
   education: 10,
 };
 
+// Comprehensive list of software, cloud, data, and ML competencies to extract from job descriptions
+const COMPREHENSIVE_TECH_TERMS = [
+  // Frontend
+  "React", "Next.js", "TypeScript", "JavaScript", "Angular", "Vue", "Vue.js", "Svelte",
+  "HTML5", "CSS3", "Tailwind CSS", "Redux", "Zustand", "Webpack", "Vite",
+  // Backend & Languages
+  "Node.js", "Python", "Go", "Golang", "Java", "C++", "C#", ".NET", "Rust", "Ruby", "PHP",
+  "FastAPI", "Django", "Flask", "Express", "NestJS", "Spring Boot",
+  // Databases
+  "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "DynamoDB", "Cassandra",
+  "SQL", "NoSQL", "Prisma",
+  // Cloud & DevOps
+  "AWS", "GCP", "Google Cloud", "Azure", "Docker", "Kubernetes", "CI/CD", "GitHub Actions",
+  "GitLab CI", "Jenkins", "Terraform", "Linux", "Argocd",
+  // Architecture & APIs
+  "REST APIs", "REST API development", "GraphQL", "gRPC", "Microservices", "System Design",
+  "Kafka", "RabbitMQ", "OAuth", "WebSockets", "Distributed Systems",
+  // AI & ML
+  "Machine Learning", "Deep Learning", "PyTorch", "TensorFlow", "NLP", "LLM", "Data Science",
+  // Testing
+  "Jest", "Cypress", "Playwright", "Unit Testing", "TDD"
+];
+
 /**
  * Extracts structured requirements from raw job description text.
  */
@@ -16,23 +39,14 @@ export function extractJobRequirementsFromText(rawText: string): ExtractedJobReq
   const text = rawText || "";
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
 
-  // 1. Extract skills
   const requiredSkills: string[] = [];
   const preferredSkills: string[] = [];
   const keywordsSet = new Set<string>();
 
-  // Known skill keys to scan
-  const allKnownSkills = Object.values(SKILL_TAXONOMY).map((s) => s.canonical);
-  const additionalTerms = [
-    "Next.js", "React", "Node.js", "TypeScript", "JavaScript", "Python", "Java", "Go",
-    "PostgreSQL", "MongoDB", "Redis", "MySQL", "Docker", "Kubernetes", "AWS", "GCP", "Azure",
-    "GraphQL", "REST APIs", "Tailwind CSS", "CI/CD", "Git", "Microservices", "System Design",
-    "Kafka", "RabbitMQ", "Linux", "Terraform", "Jest", "Cypress"
-  ];
+  const taxonomySkills = Object.values(SKILL_TAXONOMY).map((s) => s.canonical);
+  const candidateTerms = Array.from(new Set([...taxonomySkills, ...COMPREHENSIVE_TECH_TERMS]));
 
-  const uniqueCandidates = Array.from(new Set([...allKnownSkills, ...additionalTerms]));
-
-  // Check section contexts (Required vs Preferred)
+  // Check section contexts (Required vs Preferred vs Responsibilities)
   let currentSection: "required" | "preferred" | "responsibilities" | "general" = "general";
   const responsibilities: string[] = [];
   const requirementsList: string[] = [];
@@ -43,7 +57,8 @@ export function extractJobRequirementsFromText(rawText: string): ExtractedJobReq
     if (
       lower.includes("responsibilit") ||
       lower.includes("what you'll do") ||
-      lower.includes("role overview")
+      lower.includes("role overview") ||
+      lower.includes("duties")
     ) {
       currentSection = "responsibilities";
       continue;
@@ -59,7 +74,8 @@ export function extractJobRequirementsFromText(rawText: string): ExtractedJobReq
       lower.includes("require") ||
       lower.includes("qualification") ||
       lower.includes("must have") ||
-      lower.includes("what we're looking for")
+      lower.includes("what we're looking for") ||
+      lower.includes("basic qualifications")
     ) {
       currentSection = "required";
       continue;
@@ -68,7 +84,7 @@ export function extractJobRequirementsFromText(rawText: string): ExtractedJobReq
     // Capture bullet points for responsibilities / requirements
     if (line.startsWith("-") || line.startsWith("•") || line.startsWith("*") || /^\d+\./.test(line)) {
       const cleanLine = line.replace(/^[-•*\d.]+\s*/, "").trim();
-      if (cleanLine.length > 10) {
+      if (cleanLine.length > 8) {
         if (currentSection === "responsibilities") {
           responsibilities.push(cleanLine);
         } else if (currentSection === "required" || currentSection === "general") {
@@ -79,18 +95,17 @@ export function extractJobRequirementsFromText(rawText: string): ExtractedJobReq
   }
 
   // Scan text for skills
-  for (const skill of uniqueCandidates) {
-    const escaped = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const lowerText = text.toLowerCase();
+  const preferredIdx = lowerText.indexOf("preferred");
+  const bonusIdx = lowerText.indexOf("nice to have");
+  const prefStart = preferredIdx !== -1 ? preferredIdx : bonusIdx;
+
+  for (const term of candidateTerms) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(`\\b${escaped}\\b`, "i");
     if (regex.test(text)) {
-      const norm = normalizeSkill(skill);
+      const norm = normalizeSkill(term);
       keywordsSet.add(norm);
-
-      // Determine if it was under preferred or required section
-      const lowerText = text.toLowerCase();
-      const preferredIdx = lowerText.indexOf("preferred");
-      const bonusIdx = lowerText.indexOf("nice to have");
-      const prefStart = preferredIdx !== -1 ? preferredIdx : bonusIdx;
 
       const skillIdx = lowerText.indexOf(norm.toLowerCase());
 
@@ -106,9 +121,23 @@ export function extractJobRequirementsFromText(rawText: string): ExtractedJobReq
     }
   }
 
-  // Ensure minimum essential required skills if text had common terms
+  // If text contained custom bullets with technical terms not in candidateTerms
+  for (const reqBullet of requirementsList) {
+    if (reqBullet.length < 50) {
+      const cleanTerm = reqBullet.replace(/^[-•*\s]+/, "").trim();
+      if (cleanTerm.length > 2 && cleanTerm.length < 35 && !requiredSkills.includes(cleanTerm)) {
+        // e.g. "REST API development" or "CI/CD pipelines"
+        if (/api|cloud|database|pipeline|learning|design|architecture/i.test(cleanTerm)) {
+          requiredSkills.push(cleanTerm);
+          keywordsSet.add(cleanTerm);
+        }
+      }
+    }
+  }
+
+  // Fallback default skills only if zero skills were identified in the entire description
   if (requiredSkills.length === 0) {
-    requiredSkills.push("React", "TypeScript", "Node.js", "PostgreSQL");
+    requiredSkills.push("Software Engineering", "Full-Stack Development", "System Architecture");
   }
 
   // 2. Minimum experience years extraction
@@ -136,10 +165,10 @@ export function extractJobRequirementsFromText(rawText: string): ExtractedJobReq
   // 4. Default responsibilities if section was flat
   if (responsibilities.length === 0) {
     responsibilities.push(
-      "Architect, develop, and maintain scalable web applications and distributed APIs.",
+      "Architect, develop, and maintain scalable applications and distributed APIs.",
       "Collaborate with cross-functional product and engineering teams to deliver high-impact features.",
       "Ensure system reliability, security, observability, and robust test coverage.",
-      "Mentor junior team members and participate in architectural design reviews."
+      "Participate in architectural reviews, mentoring, and technical discussions."
     );
   }
 

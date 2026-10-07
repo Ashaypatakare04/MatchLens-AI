@@ -215,7 +215,9 @@ export default function CandidateDetailPage() {
                 </span>
                 <span className="flex items-center space-x-1.5">
                   <Briefcase className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{candidate.totalExperienceYears} yrs verified tenure</span>
+                  <span>
+                    Total: {candidate.totalExperienceYears} yrs | Relevant: <strong className="text-slate-900 dark:text-white">{match.relevantExperienceYears ?? match.experienceAnalysis?.relevantExperienceYears ?? candidate.totalExperienceYears} yrs</strong>
+                  </span>
                 </span>
               </div>
             </div>
@@ -372,6 +374,118 @@ export default function CandidateDetailPage() {
             </div>
           )}
         </div>
+
+        {/* 6B. Requirement-Level Evaluation Matrix (Section 5) */}
+        {match.requirementMatches && match.requirementMatches.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Cpu className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Independent Requirement-Level Evaluation ({match.requirementMatches.length})
+                </h2>
+              </div>
+              <span className="text-xs text-slate-500 font-mono">
+                5-Level Evidence &amp; Grounded Citations
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {match.requirementMatches.map((req, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 space-y-2 text-xs"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center space-x-2 flex-wrap">
+                        <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                          {req.requirement}
+                        </span>
+                        <span className="text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500">
+                          {req.category === "required_skill" ? "Required Skill" : "Preferred Skill"}
+                        </span>
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${
+                            req.matchType === "DIRECT MATCH"
+                              ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300"
+                              : req.matchType === "TRANSFERABLE / PARTIAL MATCH"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300"
+                              : req.matchType === "WEAK / RELATED EVIDENCE"
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300"
+                              : req.matchType === "CONFLICTING / UNCERTAIN"
+                              ? "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300"
+                              : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300"
+                          }`}
+                        >
+                          {req.matchType}
+                        </span>
+                        {typeof req.evidenceLevel === "number" && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            Level {req.evidenceLevel} Evidence
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 self-start sm:self-auto font-mono text-xs">
+                      <span className="text-slate-500">
+                        Score: <strong className="text-slate-900 dark:text-white">{req.semanticScore}/100</strong>
+                      </span>
+                      {req.scoreContribution !== undefined && (
+                        <span className="text-indigo-600 font-bold">
+                          +{req.scoreContribution} pts
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-slate-700 dark:text-slate-300 text-[11px] leading-relaxed">
+                    <strong>Reasoning:</strong> {req.explanation}
+                  </p>
+
+                  <div className="p-2.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                    &quot;{req.evidence}&quot;
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 6C. Contextual Transferable Skills Breakdown (Section 12) */}
+        {match.skillsAnalysis.transferableSkills.length > 0 && (
+          <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-xl p-6 shadow-sm space-y-3 text-xs">
+            <div className="flex items-center space-x-2 text-blue-900 dark:text-blue-200 font-bold text-sm">
+              <Scale className="w-5 h-5 text-blue-600" />
+              <h3>Contextual Transferable Competencies ({match.skillsAnalysis.transferableSkills.length})</h3>
+            </div>
+            <p className="text-slate-600 dark:text-slate-300">
+              MatchLens identifies technical counterparts where core architecture translates across frameworks, clouds, or runtimes (e.g., component-based SPAs, cloud primitives, relational SQL). Transferable credit is capped and never equals direct skill credit.
+            </p>
+            <div className="space-y-2 pt-1">
+              {match.skillsAnalysis.transferableSkills.map((t, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-blue-200 dark:border-blue-800 space-y-1"
+                >
+                  <div className="flex items-center space-x-2">
+                    <span className="font-extrabold text-blue-800 dark:text-blue-300">
+                      Candidate: {t.candidateSkill}
+                    </span>
+                    <span className="text-slate-400">→</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      Target Job Requirement: {t.targetSkill}
+                    </span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-[11px]">
+                    {t.rationale}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 7. Grounded Resume Citations (Evidence-First AI) */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">

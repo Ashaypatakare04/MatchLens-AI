@@ -5,11 +5,12 @@ import {
   ExperienceMatchResult,
   PotentialInconsistency,
   AIRecommendation,
+  RequirementMatchItem,
 } from "../types";
 
 /**
  * Generates an executive summary and explainable rationale for a candidate's match against a job.
- * Grounded in extracted facts and computed timeline metrics.
+ * Grounded in extracted facts, evidence levels, and computed timeline metrics.
  */
 export function generateExplainableSummary(
   candidate: CandidateProfile,
@@ -17,7 +18,8 @@ export function generateExplainableSummary(
   skillsResult: SkillsMatchResult,
   experienceResult: ExperienceMatchResult,
   overallScore: number,
-  inconsistencies: PotentialInconsistency[]
+  inconsistencies: PotentialInconsistency[],
+  requirementMatches?: RequirementMatchItem[]
 ): {
   recommendation: AIRecommendation;
   explanation: string;
@@ -36,55 +38,57 @@ export function generateExplainableSummary(
     recommendation = "Low Alignment";
   }
 
-  // Construct grounded explanation narrative
   const reqCount = job.requirements.requiredSkills.length;
   const matchedCount = skillsResult.requiredMatched.length;
-
   const points: string[] = [];
 
-  // Match summary
+  // 1. Overall Match Summary
   points.push(
-    `Overall matching score is ${overallScore}/100 based on configured evaluation weights.`
+    `Overall matching score is ${overallScore}/100 based on configured evaluation weights (Decision Support Score — not automated hiring probability).`
   );
 
-  // Skills
-  if (matchedCount === reqCount) {
+  // 2. Technical Skills & Evidence Grounding
+  if (matchedCount === reqCount && skillsResult.requiredMissing.length === 0) {
     points.push(
-      `Candidate satisfies all ${reqCount} required technical skills (${skillsResult.requiredMatched.map((s) => s.targetSkill).join(", ")}).`
+      `Candidate satisfies all ${reqCount} required technical competencies (${skillsResult.requiredMatched.map((s) => s.targetSkill).join(", ")}).`
     );
   } else {
     points.push(
-      `Candidate demonstrates ${matchedCount}/${reqCount} required skills. Missing direct evidence for: ${skillsResult.requiredMissing.join(", ")}.`
+      `Candidate satisfies ${matchedCount}/${reqCount} required technical competencies. Missing direct evidence for: ${skillsResult.requiredMissing.join(", ")}.`
     );
   }
 
-  // Transferable skills
+  // 3. Transferable Skills Rationale
   if (skillsResult.transferableSkills.length > 0) {
     const t = skillsResult.transferableSkills[0];
     points.push(
-      `Transferable capability: Candidate's proficiency in ${t.candidateSkill} provides relevant foundational knowledge for ${t.targetSkill}.`
+      `Transferable capability: Candidate proficiency in ${t.candidateSkill} provides substantiated foundational knowledge for ${t.targetSkill}. ${t.rationale}`
     );
   }
 
-  // Experience
+  // 4. Experience Relevance (Total vs Relevant)
+  const relYears = experienceResult.relevantExperienceYears ?? experienceResult.totalYearsDetected;
+  const totYears = experienceResult.totalYearsDetected;
+  const reqYears = experienceResult.requiredYears;
+
   if (experienceResult.status === "exceeds") {
     points.push(
-      `Experience requirement exceeded: Extracted timeline reflects ~${experienceResult.totalYearsDetected} years of cumulative experience versus ${experienceResult.requiredYears}+ years requested.`
+      `Experience requirement exceeded: Profile demonstrates ~${relYears} years of directly relevant domain tenure (~${totYears} total cumulative years) versus ${reqYears}+ years requested.`
     );
   } else if (experienceResult.status === "meets") {
     points.push(
-      `Experience requirement met: Extracted timeline accounts for ~${experienceResult.totalYearsDetected} years of hands-on industry tenure.`
+      `Experience requirement met: Extracted timeline accounts for ~${relYears} years of directly relevant domain tenure (~${totYears} total cumulative years).`
     );
   } else {
     points.push(
-      `Experience below target: Profile contains approximately ${experienceResult.totalYearsDetected} years against the stated requirement of ${experienceResult.requiredYears}+ years.`
+      `Experience below target: Profile accounts for approximately ${relYears} relevant years (Total: ${totYears} years) against the stated role requirement of ${reqYears}+ years.`
     );
   }
 
-  // Inconsistencies warning
+  // 5. Inconsistency / Verification Flags
   if (inconsistencies.length > 0) {
     points.push(
-      `Notice: ${inconsistencies.length} potential area(s) require recruiter verification during screen (${inconsistencies.map((i) => i.flag).join("; ")}).`
+      `Recruiter Verification Note: ${inconsistencies.length} potential area(s) require verification during screening screen (${inconsistencies.map((i) => i.flag).join("; ")}).`
     );
   }
 

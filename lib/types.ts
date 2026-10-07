@@ -129,9 +129,31 @@ export interface SkillsMatchResult {
   }>;
 }
 
+export type RequirementMatchType =
+  | "DIRECT MATCH"
+  | "TRANSFERABLE / PARTIAL MATCH"
+  | "WEAK / RELATED EVIDENCE"
+  | "MISSING"
+  | "CONFLICTING / UNCERTAIN";
+
+export interface RequirementMatchItem {
+  requirement: string;
+  category: "required_skill" | "preferred_skill" | "responsibility" | "experience" | "education";
+  matchType: RequirementMatchType;
+  semanticScore: number; // 0 - 100
+  evidenceScore: number; // 0 - 100
+  experienceScore: number; // 0 - 100
+  confidence: "High" | "Moderate" | "Low";
+  evidence: string;
+  explanation: string;
+  evidenceLevel?: number; // 0 - 5
+  scoreContribution?: number; // e.g. +7.4
+}
+
 export interface ExperienceMatchResult {
   score: number;
   totalYearsDetected: number;
+  relevantExperienceYears: number; // Disaggregated relevant years vs total
   requiredYears: number;
   status: "exceeds" | "meets" | "below";
   relevantRoles: Array<{
@@ -201,6 +223,10 @@ export interface MatchAnalysis {
   educationAnalysis: EducationMatchResult;
   projectAnalysis: ProjectMatchResult;
   responsibilityAlignment: ResponsibilityMatchItem[];
+  requirementMatches?: RequirementMatchItem[];
+  totalExperienceYears?: number;
+  relevantExperienceYears?: number;
+  matchingEngine?: "gemini" | "local_semantic";
   strongMatches: string[];
   missingRequirements: string[];
   potentialInconsistencies: PotentialInconsistency[];

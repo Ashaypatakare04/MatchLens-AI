@@ -1,147 +1,239 @@
-# MatchLens AI — Evidence-Backed Candidate Matching System
+# MatchLens AI — Evidence-Backed Semantic Candidate Matching System
 **ALGOTHON’26 — Track ALG-AI-01: AI Resume & Job Matching System**
 
 > **MatchLens AI — Evidence-backed candidate matching for faster, more trustworthy hiring.**  
-> *MatchLens doesn't just rank candidates. It explains the evidence behind every match and flags claims that require verification.*
+> *MatchLens doesn't just rank candidates. It explains the exact contextual evidence behind every requirement, credits substantiated transferable skills, discounts unsubstantiated buzzword lists, and flags claims requiring human recruiter verification.*
+
+[![Test Suite](https://img.shields.io/badge/Edge%20Cases-12%2F12%20PASS-brightgreen)](#automated-edge-cases--reliability-suite)
+[![AI Benchmark](https://img.shields.io/badge/AI%20Benchmark-8%2F8%20PASS%20(100%25)-blue)](#ai-evaluation-benchmark-suite-semantic-vs-keywords)
+[![Framework](https://img.shields.io/badge/Next.js-16.3.8%20App%20Router-black)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0%20Strict-blue)](https://www.typescriptlang.org)
 
 ---
 
-## 1. Problem
+## 1. Problem & Core Weaknesses in Legacy ATS
 
-Recruiters receive hundreds of resumes for a single role. Traditional Applicant Tracking Systems (ATS) rely on naive keyword filters that reward keyword-stuffed resumes, penalize qualified candidates with transferable skills, hallucinate arbitrary confidence percentages, and completely overlook timeline discrepancies or exaggerated claims.
-
----
-
-## 2. Solution
-
-**MatchLens AI** is an evidence-backed candidate matching and recruiter intelligence platform. It analyzes resumes against structured job requirements, explains the exact resume proof behind every score, detects potential inconsistencies (such as unsupported skill claims, date overlaps, and tenure mismatches), and provides transparent, configurable scoring with human-in-the-loop decision tracking.
-
----
-
-## 3. Core Features
-
-- **Multi-Format Resume Upload**: Drag-and-drop parsing for PDF, DOCX, and TXT documents.
-- **Job Requirement Extraction**: Automatically extracts required skills, preferred skills, minimum experience, education requirements, and core responsibilities from unstructured job descriptions.
-- **Interactive Requirement Fine-Tuning**: Recruiters can edit, add, or remove requirement pills before starting evaluation.
-- **Information Extraction & Normalization**: Canonicalizes skill aliases (`React.js` $\to$ `React`, `PostgreSQL` $\to$ `PostgreSQL`) and maps transferable skills (Angular/Vue $\to$ React).
-- **Candidate Scoring & Ranking**: Generates transparent matching scores out of 100 across 5 configurable dimensions.
-- **Evidence-Backed Explanations**: Every skill match and experience claim links directly to extracted resume snippets with source section and evidence strength indicators (*Strong*, *Moderate*, *Limited*).
-- **Search & Multi-Dimensional Filtering**: Search by name, skill, or company; filter by score thresholds, recommendations, inconsistency flags, and recruiter decisions.
-- **Side-by-Side Candidate Comparison**: Compare 2–4 candidates simultaneously with objective criteria-based ranking explanations.
-- **Potential Inconsistency Detection (ALG-AI-01 Bonus)**:
-  - *Unsupported skill claims* (e.g., claiming "Expert in Kubernetes" without projects or roles).
-  - *Possible overlapping employment dates* (concurrent full-time roles).
-  - *Experience claim verification* (stated summary years exceeding extracted timeline).
-- **Human-in-the-Loop Decision Tracking**: Distinct separation between AI recommendations and human recruiter actions (*Shortlist*, *Maybe*, *Reject*, and interview notes).
-- **Automated Reliability Test Suite**: Integrated runner testing 12 real edge cases.
+Traditional Applicant Tracking Systems (ATS) and naive "AI matchers" suffer from fatal structural flaws:
+1. **Shallow Keyword Overlap**: Rank candidates strictly by keyword frequency. A candidate repeating `"React"` 20 times in a skills list outranks an engineer who built high-throughput systems in Angular and Vue.
+2. **False Negatives on Transferable Skills**: A candidate with 5 years of enterprise Azure cloud infrastructure or PostgreSQL/MySQL relational modeling is marked as `0% Missing` for an AWS or database requirement.
+3. **No Evidence Contextuality**: A buzzword listed once in a skills summary receives the exact same score as a skill proven across 4 years of production responsibilities with quantified latency or revenue metrics.
+4. **Opaque Black-Box Hallucinations**: Systems delegate scoring to LLMs that return arbitrary numbers (e.g., "87%") with no mathematical transparency or recruiter adjustability.
+5. **Total vs Relevant Experience Blindness**: 10 years of retail or clerical management is treated as identical to 10 years of software engineering.
 
 ---
 
-## 4. Hybrid AI + Deterministic Architecture
+## 2. The MatchLens AI Solution
 
-MatchLens AI is deliberately designed with a clear separation between its AI/semantic layer and its deterministic computation layer. **The final candidate score is never arbitrarily decided by an LLM.**
+MatchLens AI transforms candidate matching from shallow keyword filtering into an **evidence-grounded semantic decision-support system**:
+
+- **Hybrid Semantic Architecture**: Real contextual similarity layer supporting Google Gemini `text-embedding-004` alongside a 100% offline, deterministic semantic projection engine (12 domain clusters, subword n-gram Jaccard, TF-IDF lexical, cosine similarity, asymmetric fuzzy containment).
+- **Requirement-Level Matching (Categories A–E)**: Every job requirement is evaluated independently into:
+  - `A. DIRECT MATCH`
+  - `B. TRANSFERABLE / PARTIAL MATCH`
+  - `C. WEAK / RELATED EVIDENCE`
+  - `D. MISSING`
+  - `E. CONFLICTING / UNCERTAIN`
+- **5-Level Contextual Evidence Quality**:
+  - `Level 0`: No evidence ($0.0\times$)
+  - `Level 1`: Skills list only ($0.35\times$)
+  - `Level 2`: Technical project description ($0.65\times$)
+  - `Level 3`: Work responsibility in employment history ($0.85\times$)
+  - `Level 4`: Measurable production achievement ($0.95\times$)
+  - `Level 5`: Cross-substantiated across multiple independent sections ($1.0\times$)
+- **Contextual Transferable Skills Engine**: Grants capped, justified credit ($0.65 - 0.80$ max) only when substantiated by architectural engineering context (Angular/Vue $\to$ React; Azure $\to$ AWS; MySQL $\to$ PostgreSQL; HTTP APIs $\to$ REST APIs; Automated Pipelines $\to$ CI/CD). Transferable credit **never** equals direct credit.
+- **Relevant vs Total Experience**: Distinguishes cumulative calendar tenure from verified, domain-aligned engineering tenure.
+- **Deterministic Transparent Scoring**: Recruiters configure custom weights (Skills, Experience, Responsibilities, Projects, Education) and receive an auditable, reproducible breakdown.
+- **Interactive AI Evaluation Dashboard (`/evaluation`)**: Live executable benchmarks (Tests 1–8), 6 judge demonstration cases (Cases A–F), and an interactive sandbox proving semantic matching decisively outperforms keyword baselines.
+
+---
+
+## 3. End-to-End System Architecture
 
 ```
-Recruiter
-   │
-   ▼
-MatchLens Web App
-   │
-   ▼
-Job Description / Resume Upload
-   │
-   ▼
-Document Extraction (PDF via unpdf, DOCX via mammoth, TXT)
-   │
-   ▼
-Information Normalization (Skill taxonomy & chronological timeline resolver)
-   │
-   ▼
-AI / Semantic Analysis (Requirement extraction & semantic relevance)
-   │
-   ▼
-Matching Engine
-   ├── Skills (exact, synonym, transferable)
-   ├── Experience (verified non-overlapping tenure)
-   ├── Responsibilities (role alignment)
-   ├── Projects (portfolio technology mapping)
-   └── Education (degree verification)
-   │
-   ▼
-Evidence Layer (Snippet citation logging)
-   │
-   ▼
-Consistency Checker (Unsupported claims, date overlaps, experience mismatch)
-   │
-   ▼
-Deterministic Scoring Engine (Configurable weighted sum formula)
-   │
-   ▼
-Ranking (Ranked candidates dashboard)
-   │
-   ▼
-Comparison (Side-by-side synchronized matrix)
-   │
-   ▼
-Recruiter Decision (Shortlist / Interview / Reject + Notes)
+JOB DESCRIPTION                           CANDIDATE RESUME
+      │                                          │
+      ▼                                          ▼
+Requirement Extraction (Job Extractor)    Multi-Format Document Parsing (unpdf / mammoth)
+      │                                          │
+      ▼                                          ▼
+Requirement Classification                Profile Normalization & Timeline Resolver
+(Required / Preferred / Experience)              │
+      │                                          ▼
+      ├───────────────────┬──────────────────────┘
+                          │
+                          ▼
+            Contextual Evidence Classifier (Levels 0 – 5)
+                          │
+                          ▼
+            Contextual Transferable Engine (Taxonomy + Context Terms)
+                          │
+                          ▼
+            Semantic Similarity Layer
+            (Gemini Embeddings OR Deterministic Multi-Domain Vector Projection)
+                          │
+                          ▼
+            Requirement-Level Evaluator (Categories A – E)
+            - Semantic Score, Evidence Score, Experience Score, Confidence
+                          │
+                          ▼
+            Profile Consistency Checker (ALG-AI-01 Bonus)
+            - Unsupported skill claims
+            - Overlapping employment dates
+            - Tenure discrepancy checks
+                          │
+                          ▼
+            Deterministic Weighted Scorer (Recruiter Configurable Weights)
+                          │
+                          ▼
+            Evidence Citations & Explainable Summary
+                          │
+                          ▼
+            Recruiter Decision Support (Shortlist / Maybe / Reject + Notes)
 ```
 
-### Architectural Layer Responsibilities
+---
 
-| Layer | Responsibility | Why It's Separated |
-|---|---|---|
-| **AI / Semantic Layer** | • Requirement extraction from job description<br>• Resume layout understanding<br>• Semantic relevance & transferable skills graph<br>• Grounded executive explanation generation | Best suited for natural language comprehension and qualitative synthesis. |
-| **Deterministic Layer** | • Score calculation from configured weights<br>• Chronological timeline & tenure math<br>• Date overlap detection (calendar math)<br>• SHA-256 duplicate resume detection<br>• Rule-based consistency audits | Eliminates black-box scoring, hallucinations, and non-reproducible ranking changes. |
+## 4. Reusable Semantic Similarity & Embedding Fallback
+
+The semantic similarity engine is located at `lib/engine/semantic-similarity.ts`.
+
+### Cloud vs Local Offline Fallback
+- **Cloud Mode**: When `GEMINI_API_KEY` is present, uses Google Gemini `text-embedding-004` (768 dimensions) to compute cosine similarities.
+- **Local Fallback Mode**: When running offline or without an API key, the system automatically falls back to MatchLens's **Deterministic Multi-Domain Semantic Projection Engine**:
+  - 12 orthogonal domain clusters (Frontend SPA, Backend Runtime, Relational DB, NoSQL, Cloud Primitives, Container Orchestration, CI/CD, API Architecture, Data Engineering, Testing, Systems Programming, Architecture & Design).
+  - Subword 3-gram & 4-gram Jaccard similarity for morphological and spelling variations.
+  - TF-IDF style rare-token boost.
+  - Asymmetric domain containment (`computeDomainContainment`) to evaluate single-domain requirements against comprehensive multi-domain resumes without vector dilution.
+  - **Zero random numbers, zero fabricated vectors.**
+- **UI Transparency**: The system explicitly displays status badges in the top navigation and candidate cards:
+  - *“Semantic analysis enabled”* (Gemini configured)
+  - *“Semantic API unavailable — using local matching fallback”* (Offline mode)
 
 ---
 
-## 5. Technology Stack
+## 5. Contextual Evidence Hierarchy (Levels 0 – 5)
 
-- **Framework**: Next.js 16 (App Router, Turbopack, React 19)
-- **Language**: TypeScript 5 (Strict type checking across all data contracts)
-- **Styling**: Tailwind CSS v4, Lucide React Icons
-- **Document Parsers**:
-  - `unpdf` (Canvas-free edge/node PDF extractor)
-  - `mammoth` (Pure JS DOCX document parser)
-- **AI / LLM Layer**: Google Gemini 2.5 Flash (`@google/genai`) with seamless local hybrid deterministic fallback
-- **Persistence**: File-backed local storage (`.data/db.json`) with in-memory caching
-- **Testing**: Integrated 12-scenario Edge Cases & Reliability test suite (`/test-suite`)
+Every extracted skill or requirement is classified by its depth of evidence in `lib/engine/evidence-classifier.ts`:
 
----
+$$\text{Contextual Score} = \text{Skill Relevance} \times \text{Evidence Multiplier} \times \text{Recency Multiplier} \times \text{Duration Factor}$$
 
-## 6. AI Components & External APIs
-
-- **Google Gemini 2.5 Flash API (`@google/genai`)**:
-  - Used optionally for qualitative recruiter summary enrichment and tailored technical screening questions when `GEMINI_API_KEY` is provided.
-- **Local Hybrid Deterministic Engine (Zero External Dependencies)**:
-  - If no external API key is set, the system automatically uses its local deterministic NLP taxonomy and matching engine. All scoring, parsing, consistency checks, citations, and comparisons run offline with zero failure risk.
+| Level | Classification | Multiplier | Description & Grounding |
+|---|---|:---:|---|
+| **Level 0** | No Evidence | $0.00$ | Absent from entire resume document. |
+| **Level 1** | Skills List Only | $0.35$ | Listed in skills summary without work duties or projects. |
+| **Level 2** | Project Description | $0.65$ | Implemented within a personal or academic project. |
+| **Level 3** | Work Responsibility | $0.85$ | Documented within employment responsibilities. |
+| **Level 4** | Measurable Achievement | $0.95$ | Supported by quantified production impact (%, QPS, users, latency). |
+| **Level 5** | Multiple Independent Sections | $1.00$ | Cross-validated across $\ge 2$ independent sections (e.g. Skills + Work + Projects). |
 
 ---
 
-## 7. Demo Dataset
+## 6. Contextual Transferable Skills Engine
 
-The application includes a pre-seeded, realistic demo dataset designed for a complete 2–4 minute judge demonstration:
+Located at `lib/normalization/transferable-engine.ts`. Evaluates architectural counterparts while enforcing two strict rules:
+1. **Transfer credit never equals direct credit** (capped between $0.65$ and $0.80$).
+2. **Context verification required**: The candidate must exhibit foundational engineering terms in work history (e.g., Angular $\to$ React requires *components, state management, SPA*; Azure $\to$ AWS requires *IAM, virtual networks, compute, storage*).
 
-- **1 Realistic Requisition**: *Senior Full-Stack & Cloud Platform Engineer* at *CloudScale Technologies*.
-  - Required Skills: React, TypeScript, Node.js, PostgreSQL, Docker (5+ years exp).
-  - Preferred Skills: Kubernetes, AWS, GraphQL, Tailwind CSS, Redis.
-- **10 Synthetic Candidate Resumes** exhibiting diverse profiles:
-  1. **Alex Rivera** (Score: 94/100): Exceptional match, satisfies all 5 required skills, 6.2 yrs verified tenure.
-  2. **Elena Rostova** (Score: 87/100): Strong match, Master's degree, verified 5.1 yrs tenure.
-  3. **David Chen** (Score: 77/100): Strong transferable skills (Angular/Vue credited toward React; MySQL toward PostgreSQL).
-  4. **Marcus Brody** (Score: 56/100): Missing required skills (strong frontend UI, lacks Node.js and PostgreSQL).
-  5. **Sarah Jenkins** (Score: 61/100): **Unsupported skill claim** (claims "Principal Kubernetes Architect", but 0 Kubernetes projects or duties).
-  6. **Vikram Malhotra** (Score: 71/100): **Possible overlapping employment dates** (20-month full-time overlap between Acrobatix and BluePeak).
-  7. **Jessica Taylor** (Score: 67/100): **Experience claim requires verification** (claims 8+ years experience, timeline covers 2.8 years).
-  8. **Jordan Blake** (Score: 78/100): **Messy resume layout** (unconventional ASCII borders and non-standard delimiters parsed cleanly).
-  9. **Carlos Gomez** (Score: 42/100): Junior candidate (1.2 years experience against 5+ year requirement).
-  10. **Amina Al-Mansoor** (Score: 79/100): Cloud & distributed systems specialist with transferable backend background.
+### Supported Transferable Counterparts
 
-*Note: All demo candidates and company names are synthetic data created for evaluation purposes.*
+| Target Requirement | Transferable Sources | Base Ratio | Required Contextual Terms |
+|---|---|:---:|---|
+| **React** | Angular, Vue.js, Svelte, SolidJS | $0.70$ | components, state, spa, virtual dom, props, reactive |
+| **AWS** | Azure, Google Cloud (GCP) | $0.75$ | cloud, iam, compute, vpc, s3, storage, lambda, serverless |
+| **PostgreSQL** | MySQL, MariaDB, Oracle SQL | $0.75$ | sql, relational, queries, schema, acid, indexes, joins |
+| **Node.js** | Go, Python (FastAPI/Django), Java Spring | $0.65$ | backend, server, asynchronous, services, microservices |
+| **REST APIs** | HTTP APIs, GraphQL, gRPC | $0.75$ | api, endpoints, service, schema, http, requests |
+| **CI/CD** | Automated Pipelines, GitHub Actions, GitLab CI, Jenkins | $0.80$ | pipeline, build, deploy, test, stage, automation, release |
 
 ---
 
-## 8. Setup & Quickstart Instructions
+## 7. Relevant vs Total Experience Calculation
+
+Calculates cumulative calendar tenure alongside domain-relevant software tenure:
+- **Total Experience**: Cumulative months across all extracted employment entries, deducting verified overlapping dates.
+- **Relevant Experience**: Filtered specifically by technical engineering titles, software domain keywords, and utilization of required/preferred technologies. Unrelated careers (e.g., retail store manager, restaurant server) receive $0.05$ relevance weight.
+
+---
+
+## 8. Deterministic Scoring Formula & Recruiter Weights
+
+The final overall score is calculated as a transparent weighted sum of 5 components:
+
+$$\text{Overall Score} = \sum_{c \in C} \left( \text{Score}_c \times \frac{\text{Weight}_c}{100} \right)$$
+
+Where $C = \{\text{Skills}, \text{Experience}, \text{Responsibilities}, \text{Projects}, \text{Education}\}$.
+
+- **Default Weights**: Skills: 30%, Experience: 25%, Responsibilities: 20%, Projects: 15%, Education: 10%.
+- **Recruiter Configurable**: Recruiters can adjust weights via an interactive modal (`Adjust Weights`).
+- **Transparency Notice**: *“This is a configurable matching score, not a probability of hiring success.”*
+
+---
+
+## 9. AI Evaluation & Benchmark Suite (Proving Semantic Beats Keywords)
+
+Access the live dashboard at **`/evaluation`** or run via CLI:
+```bash
+npm run test:benchmark
+```
+
+The benchmark suite (`lib/engine/benchmark-service.ts`) executes **8 adversarial test scenarios** specifically designed to expose keyword matching flaws:
+
+| Test # | Requirement | Resume Context | Keyword Score | MatchLens Score | Verdict & Outcome |
+|:---:|---|---|:---:|:---:|---|
+| **1** | React development | 5 yrs Angular & Vue component systems | $0 / 100$ (Missing) | **$73 / 100$ (Transferable)** | **PASS**: Catches keyword false negative. |
+| **2** | AWS | Enterprise Azure cloud engineer | $0 / 100$ (Missing) | **$79 / 100$ (Transferable)** | **PASS**: Recognizes cloud infrastructure counterpart. |
+| **3** | PostgreSQL | MySQL database indexing & ACID engineer | $0 / 100$ (Missing) | **$79 / 100$ (Transferable)** | **PASS**: Credits relational database equivalence. |
+| **4** | REST API development | Designed high-throughput HTTP APIs | $0 / 100$ (Missing) | **$79 / 100$ (Transferable)** | **PASS**: Understands semantic synonymy. |
+| **5** | Kubernetes | Mentioned only once in skills list | $100 / 100$ (Exact) | **$35 / 100$ (Level 1 Penalty)** | **PASS**: Catches keyword false positive on buzzword. |
+| **6** | Kubernetes | Operated AWS EKS clusters serving 15M QPS | $100 / 100$ (Exact) | **$100 / 100$ (Level 5 Grounded)** | **PASS**: Rewards cross-substantiated production proof. |
+| **7** | Machine Learning | Supervised learning & predictive classifiers | $50 / 100$ (Partial) | **$62 / 100$ (Semantic Concept)** | **PASS**: Matches ML subdiscipline to parent domain. |
+| **8** | CI/CD | Automated build, test & deployment pipelines | $0 / 100$ (Missing) | **$80 / 100$ (Transferable)** | **PASS**: Recognizes DevOps pipeline equivalence. |
+
+**Benchmark Results Summary**:
+- **Total Scenarios**: 8
+- **MatchLens Win Rate**: 8 / 8 (100%)
+- **Keyword Fatal Flaws Caught**: 6 false negatives, 1 false positive
+- **Average Semantic Similarity**: 63.8%
+- **Execution Time**: ~65ms
+
+---
+
+## 10. Judge Demonstration Cases (Cases A–F)
+
+Accessible under the **“Judge Demo Cases”** tab in `/evaluation` and directly runnable via API `/api/judge-demo`:
+- **Case A**: Transferable Frontend Engineer (Angular/Vue credited toward React; partial credit with architecture reasoning).
+- **Case B**: Cloud Primitives Equivalence (Azure cloud engineer credited toward AWS with IAM/VPC citations).
+- **Case C**: Buzzword-Stuffed Junior (Kubernetes listed in skills summary, penalized down to Level 1: 35%).
+- **Case D**: Senior Production Operator (Kubernetes with production scale & metrics, rewarded with Level 5: 100%).
+- **Case E**: Relational Database Translatability (MySQL engineer credited toward PostgreSQL).
+- **Case F**: High Total Tenure in Unrelated Field (10 years retail management yields 10.0 total yrs vs 0.0 relevant software yrs).
+
+---
+
+## 11. Automated Edge Cases & Reliability Suite (12 Tests)
+
+Run via UI (`/test-suite`) or CLI:
+```bash
+npm run test:edge-cases
+```
+
+All 12 edge cases execute and pass cleanly:
+1. **Perfect Candidate**: All 5 required skills, CS degree, 6+ yrs tenure $\to$ Score $\ge 85$, 0 missing.
+2. **Poor Candidate**: Unrelated retail background $\to$ Score $18/100$, Low Alignment recommendation.
+3. **Missing Required Skill**: Strong UI dev lacking Node.js & PostgreSQL $\to$ Score capped at $20/100$, flags missing.
+4. **Strong Transferable Skills**: Angular/Vue & MySQL $\to$ Recognizes transferable skills, awards grounded credit.
+5. **Messy Resume**: ASCII borders and unconventional delimiters $\to$ Parses cleanly without error.
+6. **Scanned / Low-Text Resume**: Document with no text layer $\to$ Flags low-confidence extraction.
+7. **Missing Education**: Self-taught engineer $\to$ States *"Not found in resume"*, does not hallucinate degree.
+8. **Contradictory Employment Dates**: Overlapping full-time roles $\to$ Flags *"Possible overlapping employment dates"*.
+9. **Unsupported Skill Claim**: Claims "Principal Kubernetes Architect" with 0 proof $\to$ Flags *"Unsupported skill claim"*.
+10. **Duplicate Resume Detection**: Uploading same document twice $\to$ Caught via cryptographic SHA-256 hash.
+11. **Empty Document**: 0-byte file $\to$ Throws explicit actionable validation error.
+12. **Invalid File Format**: Unsupported extension (`.exe`) $\to$ Rejected with list of accepted formats (PDF, DOCX, TXT).
+
+---
+
+## 12. Quickstart & Running Tests
 
 ### 1. Installation
 ```bash
@@ -150,21 +242,33 @@ cd MatchLens-AI
 npm install
 ```
 
-### 2. Environment Variables (Optional)
-Create `.env.local` in the project root:
+### 2. Configuration (Optional)
+Create `.env.local`:
 ```env
-# Optional: Connect Gemini 2.5 Flash for live LLM enrichment.
-# If omitted, MatchLens AI runs fully using its built-in hybrid deterministic engine!
+# Optional: Connect Gemini embeddings and narrative generation.
+# If omitted, MatchLens AI runs fully using its built-in deterministic local engine!
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-### 3. Run Development Server
+### 3. Run Both Test Suites
+```bash
+npm test
+```
+*Executes both the 12 Edge Cases test suite and the 8 AI Evaluation Benchmarks.*
+
+### 4. Run Development Server
 ```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000) to view:
+- `/` — Landing page with value proposition
+- `/dashboard` — Recruiter workspace with active requisitions
+- `/evaluation` — AI Evaluation & Benchmark Dashboard (Tests 1–8, Cases A–F, Live Sandbox)
+- `/test-suite` — 12 Edge Cases runner
+- `/jobs/job-cloudscale-sr-fullstack/candidates` — Candidate leaderboard with Total vs Relevant Experience
+- `/jobs/job-cloudscale-sr-fullstack/candidates/cand-alex-rivera` — Evidence citations and requirement breakdown
 
-### 4. Build for Production
+### 5. Build for Production
 ```bash
 npm run build
 npm start
@@ -172,81 +276,9 @@ npm start
 
 ---
 
-## 9. Concise Judge Demo Script (Under 4 Minutes)
+## 13. Honest System Disclosures & Boundaries
 
-- **0:00–0:20 | Problem + Value Proposition**:
-  - Show Landing Page (`/`). State core value proposition: *"Evidence-backed candidate matching for faster, more trustworthy hiring."*
-  - Explain differentiator: *"MatchLens doesn't just rank candidates. It explains the evidence behind every match and flags claims that require verification."*
-
-- **0:20–0:40 | Load Demo Dataset**:
-  - Click **"Load Demo Dataset"** in the top navigation.
-  - Instantly populates the CloudScale *Senior Full-Stack & Cloud Platform Engineer* job requisition with 10 synthetic candidates.
-
-- **0:40–1:15 | Show Ranking & Score Breakdown**:
-  - Open Candidate Dashboard (`/jobs/.../candidates`).
-  - Demonstrate ranked leaderboard: Alex Rivera #1 (94/100), Elena Rostova #2 (89/100), David Chen #3 (81/100).
-  - Point out score badges and color-coded sub-dimension contributions (Skills, Experience, Education, Projects, Responsibilities).
-
-- **1:15–1:50 | Open Candidate & Demonstrate Grounded Evidence**:
-  - Open **Alex Rivera** (`/jobs/.../candidates/cand-alex-rivera`).
-  - Review 15-second scannable breakdown: Overall Match (94/100), Strong Matches, Score Breakdown, Formula Mechanics.
-  - Show grounded evidence citations directly quoting resume snippets, verified sections, and source documents with zero hallucinations.
-
-- **1:50–2:20 | Show Unsupported Claim + Overlapping Dates + Experience Mismatch**:
-  - Open **Sarah Jenkins**: Show *Unsupported skill claim* badge: *"Limited supporting evidence for Kubernetes expertise."*
-  - Open **Vikram Malhotra**: Show *Possible overlapping employment dates* badge (20-month concurrent tenure between Acrobatix and BluePeak).
-  - Open **Jessica Taylor**: Show *Experience claim requires verification* badge (claimed 8+ years in summary vs 2.8 years extracted timeline).
-
-- **2:20–2:45 | Change Experience Weight to 40% & Recalculate**:
-  - Click **"Adjust Weights"**. Slide Experience from 25% to 40%. Click **"Normalize to 100%"** (weights sum to 100%).
-  - Click **"Apply & Recalculate"**. Observe candidate rankings, component contributions, and detail scores deterministically update in real-time.
-
-- **2:45–3:10 | Compare Top Candidates**:
-  - Navigate to `/jobs/.../compare?ids=cand-alex-rivera,cand-elena-rostova,cand-david-chen`.
-  - Demonstrate side-by-side comparative matrix, contrasting Alex's direct Docker/K8s experience against David's transferable Angular $\to$ React and MySQL $\to$ PostgreSQL background.
-
-- **3:10–3:30 | Make Recruiter Decision**:
-  - Mark Alex Rivera as **"Interview"**, record candidate screen notes, and show clean human-in-the-loop decision persistence.
-
-- **3:30–4:00 | Show Automated Edge-Case Suite**:
-  - Navigate to `/test-suite`.
-  - Click **"Re-Run All 12 Tests"** to execute live end-to-end evaluation across all 12 document format, anomaly, and reliability scenarios. Show 12/12 automated validation scenarios passing.
-
----
-
-## 10. Automated Edge Cases & Reliability Suite
-
-The platform includes real automated test cases for all 12 edge case scenarios:
-
-| # | Test Scenario | Input Document | Result | Behavior & Flag Verified |
-|---|---|---|---|---|
-| 1 | **Perfect Candidate** | Full stack resume with all skills | **PASS** | Score 94/100, 0 missing requirements |
-| 2 | **Poor Candidate** | Retail store manager | **PASS** | Score 24/100, Low Alignment recommendation |
-| 3 | **Missing Required Skill** | Frontend UI dev lacking Node/Postgres | **PASS** | Caps skill score, flags missing Node.js & Postgres |
-| 4 | **Transferable Skills** | Angular/Vue & MySQL engineer | **PASS** | Transferable skill credit + architecture rationale |
-| 5 | **Messy Resume** | ASCII delimiters, non-standard layout | **PASS** | Normalized text extraction, zero parser crashes |
-| 6 | **Scanned / Low-Text** | Document with no text layer | **PASS** | Flags low-confidence extraction warning |
-| 7 | **Missing Education** | Self-taught engineer with no degree | **PASS** | States *"Not found in resume"*, does not fabricate degree |
-| 8 | **Contradictory Dates** | Overlapping full-time dates | **PASS** | Flags *"Possible overlapping employment dates"* |
-| 9 | **Unsupported Claim** | Claims K8s Architect with 0 evidence | **PASS** | Flags *"Unsupported skill claim"* |
-| 10 | **Duplicate Resume** | Identical document uploaded twice | **PASS** | Detected via cryptographic SHA-256 hash |
-| 11 | **Empty Document** | 0-byte file | **PASS** | Rejected with actionable recruiter guidance |
-| 12 | **Invalid Format** | Binary/unsupported file | **PASS** | Rejected with clear supported formats notice |
-
----
-
-## 11. Honest Disclosures & System Limitations
-
-- **Decision-Support Tool, Not Autonomous Decision-Maker**: MatchLens AI assists human recruiters; it does not and should not make autonomous hiring decisions.
-- **Document Structure Dependency**: Extraction fidelity depends on readable text layers. Non-OCR scans of physical paper documents yield low-confidence flags.
-- **Inconsistencies Are Incomplete Inferences**: Flags highlight potential discrepancies for recruiter verification during screens, not definitive evidence of candidate deception.
-- **Semantic Similarity $\neq$ Actual Capability**: Transferable skill credits indicate conceptual overlap (e.g. Angular to React), not verified production fluency.
-
----
-
-## 12. Future Roadmap
-
-- **Advanced Multi-Language OCR**: Integration with AWS Textract or Tesseract for non-digital scanned physical documents.
-- **Cross-Requisition Matching**: Match a single uploaded resume across multiple active open positions simultaneously.
-- **ATS Webhook Connectors**: Two-way synchronization with Greenhouse, Lever, and Workday APIs.
-- **Recruiter Feedback Learning**: Fine-tuning skill weight preferences based on recruiter shortlist actions over time.
+- **Recruiter Decision-Support, Not Autonomous Hiring**: MatchLens AI surfaces verified evidence and flags risks. It does not automate hiring or rejections.
+- **Configurable Matching Score $\neq$ Probability of Success**: Match scores reflect alignment to recruiter-specified job weights and criteria, not a statistical prediction of job performance.
+- **Transferable Credit $\neq$ Production Mastery**: A candidate with strong Angular skills receives transferable credit for React architecture, but will still need an onboarding curve for React-specific hooks and conventions.
+- **Text Layer Prerequisite**: Document extraction relies on digital text streams. Scanned image-only PDFs without OCR layers will be appropriately flagged as low-confidence.

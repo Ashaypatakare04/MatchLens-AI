@@ -99,7 +99,7 @@ export function extractCandidateProfileFromText(
   const skills = extractSkills(text, sections.skills || "");
 
   // 11. Projects Extraction
-  const projects = extractProjects(sections.projects || text);
+  const projects = sections.projects.trim() ? extractProjects(sections.projects) : [];
 
   // 12. Certifications Extraction
   const certifications = extractCertifications(sections.certifications || text);
@@ -208,17 +208,32 @@ function extractWorkHistory(expText: string): WorkExperienceItem[] {
         achievements.length = 0;
       }
 
+      // Check if line contains an inline description (e.g. "...(Jan 2021 - Present): Built React...")
+      let headerText = line;
+      let inlineDesc = "";
+      const colonMatch = line.match(/\):\s*(.+)$/);
+      if (colonMatch) {
+        inlineDesc = colonMatch[1].trim();
+        headerText = line.substring(0, colonMatch.index! + 1);
+      } else {
+        const afterDateMatch = line.substring(line.indexOf(match[0]) + match[0].length).match(/^[\s:–—-]+(.+)$/);
+        if (afterDateMatch && afterDateMatch[1].trim().length > 10) {
+          inlineDesc = afterDateMatch[1].trim();
+          headerText = line.substring(0, line.indexOf(match[0]) + match[0].length);
+        }
+      }
+
       // Found a new position header
-      const parts = line.split(/[|•–—\t]+/);
+      const parts = headerText.split(/[|•–—\t]+/);
       let title = "Software Engineer";
       let company = "Technology Company";
       const dateStr = match[0];
 
       if (parts.length > 1) {
-        title = parts[0].replace(dateRegex, "").trim() || "Software Engineer";
-        company = parts[1].replace(dateRegex, "").trim() || "Technology Company";
+        title = parts[0].replace(dateRegex, "").replace(/[()]/g, "").trim() || "Software Engineer";
+        company = parts[1].replace(dateRegex, "").replace(/[()]/g, "").trim() || "Technology Company";
       } else {
-        const withoutDate = line.replace(dateRegex, "").trim();
+        const withoutDate = headerText.replace(dateRegex, "").replace(/[()]/g, "").trim();
         const subParts = withoutDate.split(/ at | @ /i);
         if (subParts.length > 1) {
           title = subParts[0].trim();
@@ -231,6 +246,10 @@ function extractWorkHistory(expText: string): WorkExperienceItem[] {
       const dateParts = dateStr.split(/[-–—to]+/i);
       const start = dateParts[0]?.trim() || "2020";
       const end = dateParts[1]?.trim() || "Present";
+
+      if (inlineDesc) {
+        descBuffer.push(inlineDesc);
+      }
 
       currentItem = {
         id: `exp-${Math.random().toString(36).substring(2, 6)}`,
@@ -355,9 +374,9 @@ function extractEducation(eduText: string): EducationItem[] {
 
 function extractSkills(fullText: string, skillsSectionText: string): string[] {
   const foundSkills = new Set<string>();
-
   const scanSource = skillsSectionText ? `${skillsSectionText}\n\n${fullText}` : fullText;
 
+  // 1. Scan taxonomy
   for (const def of Object.values(SKILL_TAXONOMY)) {
     const escaped = def.canonical.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(`\\b${escaped}\\b`, "i");
@@ -375,16 +394,37 @@ function extractSkills(fullText: string, skillsSectionText: string): string[] {
     }
   }
 
-  // Also extract common tech keywords
-  const extraTech = [
-    "GraphQL", "REST APIs", "Tailwind CSS", "CI/CD", "Git", "Microservices",
-    "System Design", "Kafka", "RabbitMQ", "Linux", "Terraform", "Jest", "Cypress",
-    "SQL", "HTML5", "CSS3", "OAuth", "FastAPI", "Express"
+  // 2. Comprehensive tech terms scan
+  const broadTech = [
+    "React", "Next.js", "TypeScript", "JavaScript", "Angular", "Vue", "Vue.js", "Svelte",
+    "Node.js", "Python", "Go", "Golang", "Java", "C++", "C#", ".NET", "Rust", "Ruby",
+    "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "DynamoDB", "Cassandra",
+    "AWS", "GCP", "Google Cloud", "Azure", "Docker", "Kubernetes", "CI/CD", "Terraform",
+    "GraphQL", "REST APIs", "Tailwind CSS", "Git", "Microservices", "System Design",
+    "Kafka", "RabbitMQ", "Linux", "Jest", "Cypress", "SQL", "HTML5", "CSS3", "OAuth",
+    "FastAPI", "Express", "Machine Learning", "Deep Learning", "PyTorch", "TensorFlow",
+    "Supervised Learning", "Predictive Modeling", "NLP", "LLM"
   ];
-  for (const tech of extraTech) {
+  for (const tech of broadTech) {
     const regex = new RegExp(`\\b${tech.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
     if (regex.test(scanSource)) {
       foundSkills.add(normalizeSkill(tech));
+    }
+  }
+
+  // 3. Directly parse items listed in skills section (handles novel/unseen technologies)
+  if (skillsSectionText) {
+    const cleanLines = skillsSectionText.split("\n").map((l) => l.trim()).filter(Boolean);
+    for (const line of cleanLines) {
+      // Remove section headers like "Frontend:", "Backend:", "Languages:"
+      const strippedHeader = line.replace(/^[a-zA-Z\s&/]+:\s*/, "");
+      // Split by common delimiters (comma, semicolon, bullet, pipe, slashes)
+      const rawTokens = strippedHeader.split(/[,;•|\/\t]+/).map((t) => t.trim().replace(/^[-*•]+\s*/, ""));
+      for (const token of rawTokens) {
+        if (token.length >= 2 && token.length <= 30 && !/^(and|with|including|tools|stack)$/i.test(token)) {
+          foundSkills.add(normalizeSkill(token));
+        }
+      }
     }
   }
 

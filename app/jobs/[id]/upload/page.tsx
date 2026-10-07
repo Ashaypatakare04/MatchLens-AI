@@ -29,13 +29,12 @@ interface UploadedFileItem {
 }
 
 const PROCESSING_STEPS = [
-  "Uploading document...",
-  "Extracting text & structure...",
-  "Normalizing skills & taxonomy...",
-  "Analyzing job criteria...",
-  "Running ALG-AI-01 inconsistency scan...",
-  "Generating evidence-backed explanation...",
-  "Finalizing match score...",
+  "Stage 1: Document parsing & layout extraction...",
+  "Stage 2: Requirement extraction & classification...",
+  "Stage 3: Semantic analysis & domain vector projection...",
+  "Stage 4: Contextual evidence validation (Levels 0–5)...",
+  "Stage 5: Deterministic scoring & relevant experience calculation...",
+  "Stage 6: Ranking candidates & generating grounded citations...",
 ];
 
 export default function ResumeUploadPage() {
