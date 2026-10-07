@@ -4,10 +4,17 @@
 > **MatchLens AI — Evidence-backed candidate matching for faster, more trustworthy hiring.**  
 > *MatchLens doesn't just rank candidates. It explains the exact contextual evidence behind every requirement, credits substantiated transferable skills, discounts unsubstantiated buzzword lists, and flags claims requiring human recruiter verification.*
 
-[![Test Suite](https://img.shields.io/badge/Edge%20Cases-12%2F12%20PASS-brightgreen)](#automated-edge-cases--reliability-suite)
-[![AI Benchmark](https://img.shields.io/badge/AI%20Benchmark-8%2F8%20PASS%20(100%25)-blue)](#ai-evaluation-benchmark-suite-semantic-vs-keywords)
-[![Framework](https://img.shields.io/badge/Next.js-16.3.8%20App%20Router-black)](https://nextjs.org)
+[![Test Suite](https://img.shields.io/badge/Edge%20Cases-12%2F12%20PASS-brightgreen)](#11-automated-edge-cases--reliability-suite-12-tests)
+[![AI Benchmark](https://img.shields.io/badge/AI%20Benchmark-8%2F8%20PASS%20(100%25%20Win%20Rate)-blue)](#9-ai-evaluation--benchmark-suite-proving-semantic-beats-keywords)
+[![Build](https://img.shields.io/badge/Next.js%2016-Build%20Passing-success)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%20Strict-blue)](https://www.typescriptlang.org)
+[![License](https://img.shields.io/badge/License-MIT-gray)](LICENSE)
+
+---
+
+### 📑 Independent Audit & QA Reports
+- 📄 **[FINAL_QA_REPORT.md](FINAL_QA_REPORT.md)** — *Comprehensive Pre-Fix Codebase Audit, 8-Failure Test Matrix, and Remediation Blueprint.*
+- 📄 **[POST_FIX_QA_REPORT.md](POST_FIX_QA_REPORT.md)** — *Post-Fix Regression Report, 13/13 Failures Resolved, Test & Build Verification Outputs.*
 
 ---
 
@@ -267,6 +274,7 @@ Open [http://localhost:3000](http://localhost:3000) to view:
 - `/test-suite` — 12 Edge Cases runner
 - `/jobs/job-cloudscale-sr-fullstack/candidates` — Candidate leaderboard with Total vs Relevant Experience
 - `/jobs/job-cloudscale-sr-fullstack/candidates/cand-alex-rivera` — Evidence citations and requirement breakdown
+- `/jobs/job-cloudscale-sr-fullstack/compare?ids=cand-alex-rivera,cand-elena-rostova,cand-david-chen` — Side-by-side comparison matrix
 
 ### 5. Build for Production
 ```bash
@@ -276,7 +284,43 @@ npm start
 
 ---
 
-## 13. Honest System Disclosures & Boundaries
+## 13. Concise Judge Demo Script (Under 4 Minutes)
+
+- **0:00–0:30 | Value Proposition & Evaluation Dashboard**:
+  - Open `/evaluation`. Show the **AI Benchmark (Tests 1–8)** with 100% win rate against keyword baseline.
+  - Explain the core difference: MatchLens credits transferable skills, discounts buzzword lists, and links exact resume proof.
+- **0:30–1:00 | Judge Demo Cases**:
+  - Switch to the **Judge Demo Cases (A–F)** tab on `/evaluation`.
+  - Click **Case A** (Angular/Vue credited to React) and **Case C vs Case D** (Buzzword list penalized to 35% vs Production scale rewarded with 100%).
+- **1:00–1:45 | Candidate Leaderboard & Relevant Experience**:
+  - Open `/jobs/job-cloudscale-sr-fullstack/candidates`.
+  - Point out Match Type badges and **Total vs Relevant Experience** (`Total: 6.2 yrs | Relevant: 6.2 yrs` vs unrelated profiles).
+- **1:45–2:30 | Requirement-Level Matrix & Grounded Evidence**:
+  - Open candidate detail `/jobs/job-cloudscale-sr-fullstack/candidates/cand-david-chen`.
+  - Show the **Requirement-Level Evaluation Matrix** with Categories A–E, exact resume citations, and transferable skill analysis.
+- **2:30–3:15 | Recruiter Decision Support & Weight Recalculation**:
+  - Click **Adjust Weights**: Change Experience from 25% to 40%, click **Apply & Recalculate**. Notice scores update deterministically in real time.
+  - Record a recruiter decision (*Shortlist/Interview*) with private interview screen notes.
+- **3:15–4:00 | Automated Reliability Suites**:
+  - Navigate to `/test-suite` and demonstrate all 12 edge cases passing.
+
+---
+
+## 14. API Endpoints Reference
+
+| Endpoint | Method | Description |
+|---|:---:|---|
+| `/api/benchmark` | `GET`, `POST` | Executes the 8 AI evaluation benchmarks comparing Keyword vs MatchLens. |
+| `/api/judge-demo` | `GET`, `POST` | Executes the 6 Judge Demonstration Cases (Cases A–F) with real pipeline execution. |
+| `/api/jobs` | `GET`, `POST` | Lists requisitions or creates new job openings with extracted requirements. |
+| `/api/jobs/[id]/candidates` | `GET` | Fetches candidates ranked by deterministic match score with evidence logs. |
+| `/api/jobs/[id]/upload` | `POST` | Uploads and parses PDF/DOCX/TXT resumes through the full dynamic semantic pipeline. |
+| `/api/jobs/[id]/rescore` | `POST` | Re-evaluates candidate scores dynamically upon recruiter weight adjustments. |
+| `/api/edge-cases/run` | `GET`, `POST` | Executes the 12 Edge Cases & Reliability test suite. |
+
+---
+
+## 15. Honest System Disclosures & Boundaries
 
 - **Recruiter Decision-Support, Not Autonomous Hiring**: MatchLens AI surfaces verified evidence and flags risks. It does not automate hiring or rejections.
 - **Configurable Matching Score $\neq$ Probability of Success**: Match scores reflect alignment to recruiter-specified job weights and criteria, not a statistical prediction of job performance.
