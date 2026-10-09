@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Store } from "@/lib/storage/store";
 import { CandidateWithMatch } from "@/lib/types";
+import { requireAuthenticatedUser, handleAuthError } from "@/lib/auth/session";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await requireAuthenticatedUser(req);
     const { id: jobId } = await params;
-    const candidates = await Store.getCandidates(jobId);
-    const matches = await Store.getMatches(jobId);
+
+    // Verify parent job belongs to user's organization
+    const job = await Store.getJob(user.organizationId, jobId);
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    }
+
+    const candidates = await Store.getCandidates(user.organizationId, jobId);
+    const matches = await Store.getMatches(user.organizationId, jobId);
 
     const matchMap = new Map(matches.map((m) => [m.candidateId, m]));
 
@@ -106,7 +115,6 @@ export async function GET(
 
     return NextResponse.json({ candidates: results, total: results.length });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleAuthError(err);
   }
 }

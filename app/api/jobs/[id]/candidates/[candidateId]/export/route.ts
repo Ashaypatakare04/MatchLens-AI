@@ -2,35 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { Store } from "@/lib/storage/store";
 import { generateCandidateEvidencePackMarkdown } from "@/lib/engine/export-service";
 import { AuditLogger } from "@/lib/engine/audit-logger";
+import { requireAuthenticatedUser, handleAuthError } from "@/lib/auth/session";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string; candidateId: string }> }
 ) {
   try {
+    const user = await requireAuthenticatedUser(req);
     const { id: jobId, candidateId } = await params;
     const format = req.nextUrl.searchParams.get("format") || "markdown";
 
-    const candidate = await Store.getCandidate(candidateId);
-    const match = await Store.getMatch(candidateId);
-    const job = await Store.getJob(jobId);
-
-    if (!candidate || !match || !job) {
+    const job = await Store.getJob(user.organizationId, jobId);
+    if (!job) {
       return NextResponse.json(
         { error: "Candidate, match analysis, or job requisition not found" },
         { status: 404 }
       );
     }
 
-    // Record audit event for compliance
-    await AuditLogger.recordEvent({
+    const candidate = await Store.getCandidate(user.organizationId, candidateId);
+    const match = await Store.getMatch(user.organizationId, candidateId);
+
+    if (!candidate || !match || candidate.jobId !== jobId) {
+      return NextResponse.json(
+        { error: "Candidate, match analysis, or job requisition not found" },
+        { status: 404 }
+      );
+    }
+
+    // Record audit event for compliance scoped to organization
+    await AuditLogger.recordEvent(user.organizationId, {
       eventType: "candidate_exported",
       jobId,
       candidateId,
       actor: {
-        userId: "recruiter-default",
-        userName: "Primary Recruiter",
-        role: "RECRUITER",
+        userId: user.id,
+        userName: user.name,
+        role: user.role,
       },
       notes: `Exported Hiring Committee Evidence Pack in ${format.toUpperCase()} format.`,
       metadata: {
@@ -61,7 +70,6 @@ export async function GET(
       },
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleAuthError(err);
   }
 }

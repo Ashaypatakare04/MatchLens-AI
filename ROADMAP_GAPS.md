@@ -19,29 +19,38 @@ This document outlines the remaining engineering, security, product, and complia
   - `scripts/test-database-phase1.ts`
   - `scripts/migrate-from-json.ts`
 
-### 2. Multi-Tenant Authentication & Organization Scoping
-- **WHY**: There is currently zero authentication or access control in the codebase. Any user with internet access can view, edit, or delete any job requisition, candidate dossier, or audit log.
-- **IMPACT**: Absolute blocker for privacy, compliance, and commercial viability.
-- **DEPENDENCIES**: Task 1 (PostgreSQL Database Migration).
-- **ESTIMATED COMPLEXITY**: High (2–3 days).
+### 2. Multi-Tenant Authentication & Organization Scoping — [COMPLETE]
+- **STATUS**: 🟢 **COMPLETE**
+- **IMPLEMENTATION SUMMARY**: Integrated NextAuth v5 (`next-auth@5.0.0-beta.32`) with bcrypt credentials provider, organization-scoped JWT claims, session validation utilities (`requireAuthenticatedUser`, `requireOrganizationMembership`, `requireOrganizationRole`), edge-isolated middleware (`middleware.ts`, `lib/auth/edge.ts`), self-service registration (`/register`, `/api/auth/register`), sign-in UI (`/login`), and role-based permissions (`ADMIN`, `RECRUITER`, `VIEWER`).
 - **RELEVANT FILES**:
-  - `middleware.ts` (to be created)
-  - `lib/auth/` (to be created)
-  - `app/api/jobs/route.ts`
-  - `app/api/jobs/[id]/candidates/route.ts`
-  - `app/api/audit-log/route.ts`
-  - `app/settings/page.tsx`
+  - `middleware.ts`
+  - `lib/auth/config.ts`
+  - `lib/auth/index.ts`
+  - `lib/auth/edge.ts`
+  - `lib/auth/session.ts`
+  - `app/api/auth/[...nextauth]/route.ts`
+  - `app/api/auth/register/route.ts`
+  - `app/login/page.tsx`
+  - `app/register/page.tsx`
+  - `components/Navbar.tsx`
 
-### 3. Row-Level Tenant Isolation on All API Routes
-- **WHY**: Even with user login, without strict tenant scoping (`organization_id` foreign keys and database constraints), one company could query or delete candidate data belonging to another company by guessing UUIDs.
-- **IMPACT**: High security vulnerability and GDPR/CCPA violation.
-- **DEPENDENCIES**: Task 1 (PostgreSQL Migration), Task 2 (Authentication).
-- **ESTIMATED COMPLEXITY**: Medium (1–2 days).
+### 3. Row-Level Tenant Isolation on All API Routes — [COMPLETE]
+- **STATUS**: 🟢 **COMPLETE**
+- **IMPLEMENTATION SUMMARY**: Enforced strict `organization_id NOT NULL` constraints with cascade foreign keys in schema (`lib/db/schema.ts`, migration `0001_daily_scarecrow.sql`). Refactored every method in `Store` and `AuditLogger` to require verified `organizationId`. Direct ID access across organizations returns non-disclosing 404s (preventing IDOR/BOLA enumeration). Verified by 32/32 automated test scenarios in `scripts/test-tenant-isolation.ts`.
 - **RELEVANT FILES**:
+  - `lib/db/schema.ts`
+  - `drizzle/0001_daily_scarecrow.sql`
   - `lib/storage/store.ts`
+  - `lib/engine/audit-logger.ts`
+  - `app/api/jobs/route.ts`
   - `app/api/jobs/[id]/route.ts`
+  - `app/api/jobs/[id]/candidates/route.ts`
   - `app/api/jobs/[id]/candidates/[candidateId]/route.ts`
+  - `app/api/jobs/[id]/candidates/[candidateId]/export/route.ts`
   - `app/api/jobs/[id]/upload/route.ts`
+  - `app/api/jobs/[id]/rescore/route.ts`
+  - `app/api/audit-log/route.ts`
+  - `scripts/test-tenant-isolation.ts`
 
 ### 4. Production Health Checks & Environment Variable Assertion
 - **WHY**: The app silently falls back to local deterministic mode if `GEMINI_API_KEY` is invalid, with no startup validation or health check endpoints for cloud load balancers.

@@ -1,19 +1,14 @@
 /**
  * MatchLens AI - Auditable Decision History & Event Logger
  * 
- * Records immutable, structured audit trail events for:
- * - Recruiter decisions & stage changes (with previous & new states, reason codes)
- * - Scoring weight adjustments and recalculations
- * - Candidate uploads & cryptographic hash deduplication
- * - Verification flag actions (confirmed, dismissed, notes)
- * 
- * Safe logging: NEVER logs full raw resume text or sensitive PII.
+ * Records immutable, structured audit trail events scoped strictly by organizationId.
  * Persisted to PostgreSQL relational audit_events table.
  */
 
 import { getDb } from "../db";
 import { auditEvents } from "../db/schema";
 import { desc, eq, and, SQL } from "drizzle-orm";
+import type { UserRole } from "../auth/session";
 
 export type AuditEventType =
   | "candidate_decision_changed"
@@ -28,13 +23,14 @@ export type AuditEventType =
 
 export interface AuditEvent {
   id: string;
+  organizationId: string;
   eventType: AuditEventType;
   jobId: string;
   candidateId?: string;
   actor: {
     userId: string;
     userName: string;
-    role: "ADMIN" | "RECRUITER" | "VIEWER";
+    role: UserRole;
   };
   previousState?: string;
   newState?: string;
@@ -46,7 +42,8 @@ export interface AuditEvent {
 
 export const AuditLogger = {
   async recordEvent(
-    event: Omit<AuditEvent, "id" | "timestamp">
+    organizationId: string,
+    event: Omit<AuditEvent, "id" | "timestamp" | "organizationId">
   ): Promise<AuditEvent> {
     const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const now = new Date();
@@ -54,6 +51,7 @@ export const AuditLogger = {
     const newEvent: AuditEvent = {
       ...event,
       id,
+      organizationId,
       timestamp: now.toISOString(),
     };
 
@@ -61,6 +59,7 @@ export const AuditLogger = {
       const db = await getDb();
       await db.insert(auditEvents).values({
         id,
+        organizationId,
         eventType: event.eventType,
         jobId: event.jobId,
         candidateId: event.candidateId || null,
@@ -79,13 +78,16 @@ export const AuditLogger = {
     return newEvent;
   },
 
-  async getEvents(filter?: {
-    jobId?: string;
-    candidateId?: string;
-  }): Promise<AuditEvent[]> {
+  async getEvents(
+    organizationId: string,
+    filter?: {
+      jobId?: string;
+      candidateId?: string;
+    }
+  ): Promise<AuditEvent[]> {
     try {
       const db = await getDb();
-      const conditions: SQL[] = [];
+      const conditions: SQL[] = [eq(auditEvents.organizationId, organizationId)];
 
       if (filter?.jobId) {
         conditions.push(eq(auditEvents.jobId, filter.jobId));
@@ -97,12 +99,13 @@ export const AuditLogger = {
       const rows = await db
         .select()
         .from(auditEvents)
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .where(and(...conditions))
         .orderBy(desc(auditEvents.timestamp))
         .limit(200);
 
       return rows.map((r) => ({
         id: r.id,
+        organizationId: r.organizationId,
         eventType: r.eventType as AuditEventType,
         jobId: r.jobId,
         candidateId: r.candidateId || undefined,
@@ -120,7 +123,10 @@ export const AuditLogger = {
     }
   },
 
-  async getCandidateHistory(candidateId: string): Promise<AuditEvent[]> {
-    return this.getEvents({ candidateId });
+  async getCandidateHistory(
+    organizationId: string,
+    candidateId: string
+  ): Promise<AuditEvent[]> {
+    return this.getEvents(organizationId, { candidateId });
   },
 };

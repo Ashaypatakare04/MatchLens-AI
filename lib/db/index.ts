@@ -78,21 +78,31 @@ export async function getDb(): Promise<AppDatabase> {
  */
 async function ensureSchemaInitialized(pglite: PGlite) {
   try {
-    const migrationFile = path.join(process.cwd(), "drizzle", "0000_gifted_omega_red.sql");
-    if (fs.existsSync(migrationFile)) {
-      const sqlContent = fs.readFileSync(migrationFile, "utf-8");
-      // Split on statement-breakpoint
-      const statements = sqlContent.split("--> statement-breakpoint");
-      for (const statement of statements) {
-        const trimmed = statement.trim();
-        if (trimmed) {
-          try {
-            await pglite.query(trimmed);
-          } catch (err: unknown) {
-            // Ignore already exists errors
-            const errMsg = err instanceof Error ? err.message : String(err);
-            if (!errMsg.includes("already exists")) {
-              console.warn("Schema initialization statement warning:", errMsg);
+    const migrationsDir = path.join(process.cwd(), "drizzle");
+    if (fs.existsSync(migrationsDir)) {
+      const sqlFiles = fs
+        .readdirSync(migrationsDir)
+        .filter((f) => f.endsWith(".sql"))
+        .sort();
+
+      for (const file of sqlFiles) {
+        const filePath = path.join(migrationsDir, file);
+        const sqlContent = fs.readFileSync(filePath, "utf-8");
+        const statements = sqlContent.split("--> statement-breakpoint");
+        for (const statement of statements) {
+          const trimmed = statement.trim();
+          if (trimmed) {
+            try {
+              await pglite.query(trimmed);
+            } catch (err: unknown) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              if (
+                !errMsg.includes("already exists") &&
+                !errMsg.includes("duplicate key")
+              ) {
+                // Non-fatal warning for already applied DDL
+                console.warn(`[PGlite Schema] Notice during ${file}:`, errMsg);
+              }
             }
           }
         }

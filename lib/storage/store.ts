@@ -1,13 +1,14 @@
 /**
- * MatchLens AI - Primary Data Access / Repository Layer (PostgreSQL / Drizzle ORM)
+ * MatchLens AI - Tenant-Scoped Data Access / Repository Layer (PostgreSQL / Drizzle ORM)
  * 
- * Replaces legacy synchronous file-based storage (.data/db.json) with
- * transactional, concurrent-safe PostgreSQL relational persistence.
+ * Enforces strict multi-tenant organization isolation across all database operations.
+ * Mandatory Rule: Every operation involving organization-owned data requires and validates
+ * the authorized organizationId. Cross-tenant access attempts return null / false (non-disclosing).
  */
 
 import { getDb } from "../db";
 import { jobs, candidates, analyses } from "../db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import {
   Job,
   ExtractedJobRequirements,
@@ -20,7 +21,8 @@ import {
 } from "../types";
 import { analyzeCandidate } from "../engine/analyzer";
 import { AuditLogger } from "../engine/audit-logger";
-import { seedDemoData } from "../db/seed";
+import { seedDemoData, DEMO_ORG_ID } from "../db/seed";
+import type { UserRole } from "../auth/session";
 
 function mapJobRow(r: typeof jobs.$inferSelect): Job {
   return {
@@ -97,23 +99,41 @@ function mapAnalysisRow(r: typeof analyses.$inferSelect): MatchAnalysis {
 }
 
 export const Store = {
-  async getJobs(): Promise<Job[]> {
+  /**
+   * Lists jobs owned by the authenticated organization.
+   */
+  async getJobs(organizationId: string): Promise<Job[]> {
     const db = await getDb();
-    const rows = await db.select().from(jobs).orderBy(desc(jobs.createdAt));
+    const rows = await db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.organizationId, organizationId))
+      .orderBy(desc(jobs.createdAt));
     return rows.map(mapJobRow);
   },
 
-  async getJob(id: string): Promise<Job | null> {
+  /**
+   * Retrieves a job by ID, strictly verifying organization ownership.
+   */
+  async getJob(organizationId: string, id: string): Promise<Job | null> {
     const db = await getDb();
-    const [row] = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
+    const [row] = await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, id), eq(jobs.organizationId, organizationId)))
+      .limit(1);
     return row ? mapJobRow(row) : null;
   },
 
-  async createJob(job: Job): Promise<Job> {
+  /**
+   * Creates a new job under the authenticated organization.
+   */
+  async createJob(organizationId: string, job: Job): Promise<Job> {
     const db = await getDb();
     const now = new Date();
     await db.insert(jobs).values({
       id: job.id,
+      organizationId,
       title: job.title,
       company: job.company,
       location: job.location,
@@ -129,13 +149,22 @@ export const Store = {
     return job;
   },
 
+  /**
+   * Updates a job, verifying organization ownership and optimistic concurrency version.
+   */
   async updateJob(
+    organizationId: string,
     id: string,
     updates: Partial<Job>,
     expectedVersion?: number
   ): Promise<Job | null> {
     const db = await getDb();
-    const [existing] = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, id), eq(jobs.organizationId, organizationId)))
+      .limit(1);
+
     if (!existing) return null;
 
     // Optimistic concurrency check
@@ -162,67 +191,150 @@ export const Store = {
         version: nextVersion,
         updatedAt: now,
       })
-      .where(eq(jobs.id, id))
+      .where(and(eq(jobs.id, id), eq(jobs.organizationId, organizationId)))
       .returning();
 
     return updated ? mapJobRow(updated) : null;
   },
 
-  async deleteJob(id: string): Promise<boolean> {
+  /**
+   * Deletes a job, verifying organization ownership. Cascades to candidates and analyses.
+   */
+  async deleteJob(organizationId: string, id: string): Promise<boolean> {
     const db = await getDb();
-    const [existing] = await db.select().from(jobs).where(eq(jobs.id, id)).limit(1);
+    const [existing] = await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, id), eq(jobs.organizationId, organizationId)))
+      .limit(1);
+
     if (!existing) return false;
 
     // Foreign key cascading deletes associated candidates & analyses in PostgreSQL
-    await db.delete(jobs).where(eq(jobs.id, id));
+    await db
+      .delete(jobs)
+      .where(and(eq(jobs.id, id), eq(jobs.organizationId, organizationId)));
     return true;
   },
 
-  async getCandidates(jobId: string): Promise<CandidateProfile[]> {
+  /**
+   * Retrieves all candidates for a job within the organization.
+   */
+  async getCandidates(
+    organizationId: string,
+    jobId: string
+  ): Promise<CandidateProfile[]> {
     const db = await getDb();
-    const rows = await db.select().from(candidates).where(eq(candidates.jobId, jobId));
+    // Validate parent job belongs to organization
+    const job = await this.getJob(organizationId, jobId);
+    if (!job) return [];
+
+    const rows = await db
+      .select()
+      .from(candidates)
+      .where(
+        and(
+          eq(candidates.jobId, jobId),
+          eq(candidates.organizationId, organizationId)
+        )
+      );
     return rows.map(mapCandidateRow);
   },
 
-  async getCandidate(id: string): Promise<CandidateProfile | null> {
-    const db = await getDb();
-    const [row] = await db.select().from(candidates).where(eq(candidates.id, id)).limit(1);
-    return row ? mapCandidateRow(row) : null;
-  },
-
-  async getMatches(jobId: string): Promise<MatchAnalysis[]> {
-    const db = await getDb();
-    const rows = await db
-      .select()
-      .from(analyses)
-      .where(eq(analyses.jobId, jobId))
-      .orderBy(desc(analyses.overallScore));
-    return rows.map(mapAnalysisRow);
-  },
-
-  async getMatch(candidateId: string): Promise<MatchAnalysis | null> {
+  /**
+   * Retrieves a candidate by ID, verifying organization ownership.
+   */
+  async getCandidate(
+    organizationId: string,
+    candidateId: string
+  ): Promise<CandidateProfile | null> {
     const db = await getDb();
     const [row] = await db
       .select()
-      .from(analyses)
-      .where(eq(analyses.candidateId, candidateId))
-      .limit(1);
-    return row ? mapAnalysisRow(row) : null;
+      .from(candidates)
+      .where(
+        and(
+          eq(candidates.id, candidateId),
+          eq(candidates.organizationId, organizationId)
+        )
+      );
+    return row ? mapCandidateRow(row) : null;
   },
 
+  /**
+   * Retrieves match analyses for a job within the organization.
+   */
+  async getMatches(
+    organizationId: string,
+    jobId: string
+  ): Promise<MatchAnalysis[]> {
+    const db = await getDb();
+    const job = await this.getJob(organizationId, jobId);
+    if (!job) return [];
+
+    const rows = await db
+      .select({ analysis: analyses })
+      .from(analyses)
+      .innerJoin(candidates, eq(analyses.candidateId, candidates.id))
+      .where(
+        and(
+          eq(analyses.jobId, jobId),
+          eq(candidates.organizationId, organizationId)
+        )
+      )
+      .orderBy(desc(analyses.overallScore));
+
+    return rows.map((r) => mapAnalysisRow(r.analysis));
+  },
+
+  /**
+   * Retrieves a single match analysis by candidate ID, verifying organization ownership.
+   */
+  async getMatch(
+    organizationId: string,
+    candidateId: string
+  ): Promise<MatchAnalysis | null> {
+    const db = await getDb();
+    const [row] = await db
+      .select({ analysis: analyses })
+      .from(analyses)
+      .innerJoin(candidates, eq(analyses.candidateId, candidates.id))
+      .where(
+        and(
+          eq(analyses.candidateId, candidateId),
+          eq(candidates.organizationId, organizationId)
+        )
+      )
+      .limit(1);
+
+    return row ? mapAnalysisRow(row.analysis) : null;
+  },
+
+  /**
+   * Persists a candidate and match atomically inside a database transaction,
+   * verifying parent job organization ownership.
+   */
   async saveCandidateWithMatch(
+    organizationId: string,
     candidate: CandidateProfile,
     match: MatchAnalysis
   ): Promise<void> {
     const db = await getDb();
     const now = new Date();
 
-    // Use transaction for atomic candidate and match persistence
+    // Verify parent job belongs to this organization
+    const job = await this.getJob(organizationId, candidate.jobId);
+    if (!job) {
+      throw new Error("Cannot save candidate: target job not found in this organization.");
+    }
+
+    // Atomic transaction
     await db.transaction(async (tx) => {
       await tx
         .insert(candidates)
         .values({
           id: candidate.id,
+          organizationId,
           jobId: candidate.jobId,
           name: candidate.name,
           email: candidate.email,
@@ -250,6 +362,7 @@ export const Store = {
         .onConflictDoUpdate({
           target: candidates.id,
           set: {
+            organizationId,
             name: candidate.name,
             email: candidate.email,
             phone: candidate.phone,
@@ -319,19 +432,33 @@ export const Store = {
     });
   },
 
-  async deleteCandidate(candidateId: string): Promise<boolean> {
+  /**
+   * Deletes a candidate, verifying organization ownership, and records audit event.
+   */
+  async deleteCandidate(
+    organizationId: string,
+    candidateId: string,
+    actor?: { userId: string; userName: string; role: UserRole }
+  ): Promise<boolean> {
     const db = await getDb();
-    const [cand] = await db.select().from(candidates).where(eq(candidates.id, candidateId)).limit(1);
-    if (!cand) return false;
+    const candidate = await this.getCandidate(organizationId, candidateId);
+    if (!candidate) return false;
 
-    const jobId = cand.jobId;
-    await db.delete(candidates).where(eq(candidates.id, candidateId));
+    const jobId = candidate.jobId;
+    await db
+      .delete(candidates)
+      .where(
+        and(
+          eq(candidates.id, candidateId),
+          eq(candidates.organizationId, organizationId)
+        )
+      );
 
-    await AuditLogger.recordEvent({
+    await AuditLogger.recordEvent(organizationId, {
       eventType: "candidate_deleted",
       jobId,
       candidateId,
-      actor: {
+      actor: actor || {
         userId: "recruiter-default",
         userName: "Primary Recruiter",
         role: "RECRUITER",
@@ -342,19 +469,29 @@ export const Store = {
     return true;
   },
 
+  /**
+   * Updates recruiter decision, notes, feedback, and pipeline stage,
+   * verifying organization ownership.
+   */
   async updateRecruiterDecision(
+    organizationId: string,
     candidateId: string,
     decision: RecruiterDecision,
     notes?: string,
     feedback?: RecruiterFeedback,
-    pipelineStage?: PipelineStage
+    pipelineStage?: PipelineStage,
+    actor?: { userId: string; userName: string; role: UserRole }
   ): Promise<MatchAnalysis | null> {
     const db = await getDb();
+    const candidate = await this.getCandidate(organizationId, candidateId);
+    if (!candidate) return null;
+
     const [match] = await db
       .select()
       .from(analyses)
       .where(eq(analyses.candidateId, candidateId))
       .limit(1);
+
     if (!match) return null;
 
     const previousDecision = match.recruiterDecision;
@@ -376,15 +513,17 @@ export const Store = {
 
     if (!updated) return null;
 
-    await AuditLogger.recordEvent({
+    const actorUser = actor || {
+      userId: feedback?.recruiterId || "recruiter-default",
+      userName: "Primary Recruiter",
+      role: "RECRUITER",
+    };
+
+    await AuditLogger.recordEvent(organizationId, {
       eventType: "candidate_decision_changed",
       jobId: match.jobId,
       candidateId,
-      actor: {
-        userId: feedback?.recruiterId || "recruiter-default",
-        userName: "Primary Recruiter",
-        role: "RECRUITER",
-      },
+      actor: actorUser,
       previousState: previousDecision,
       newState: decision,
       reasonCategory: feedback?.reason,
@@ -397,15 +536,11 @@ export const Store = {
     });
 
     if (feedback) {
-      await AuditLogger.recordEvent({
+      await AuditLogger.recordEvent(organizationId, {
         eventType: "recruiter_calibration_feedback",
         jobId: match.jobId,
         candidateId,
-        actor: {
-          userId: feedback.recruiterId || "recruiter-default",
-          userName: "Primary Recruiter",
-          role: "RECRUITER",
-        },
+        actor: actorUser,
         reasonCategory: feedback.reason,
         notes: feedback.comment || `Recruiter calibration: ${feedback.overrideType}`,
         metadata: {
@@ -419,9 +554,22 @@ export const Store = {
     return mapAnalysisRow(updated);
   },
 
-  async rescoreJob(jobId: string, weights: ScoringWeights): Promise<MatchAnalysis[]> {
+  /**
+   * Rescores candidates for a job within the authenticated organization.
+   */
+  async rescoreJob(
+    organizationId: string,
+    jobId: string,
+    weights: ScoringWeights,
+    actor?: { userId: string; userName: string; role: UserRole }
+  ): Promise<MatchAnalysis[]> {
     const db = await getDb();
-    const [jobRow] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
+    const [jobRow] = await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, jobId), eq(jobs.organizationId, organizationId)))
+      .limit(1);
+
     if (!jobRow) return [];
 
     const job = mapJobRow(jobRow);
@@ -435,19 +583,11 @@ export const Store = {
         version: jobRow.version + 1,
         updatedAt: new Date(),
       })
-      .where(eq(jobs.id, jobId));
+      .where(and(eq(jobs.id, jobId), eq(jobs.organizationId, organizationId)));
 
-    const candidateRows = await db
-      .select()
-      .from(candidates)
-      .where(eq(candidates.jobId, jobId));
-    const candProfiles = candidateRows.map(mapCandidateRow);
-
-    const existingMatchRows = await db
-      .select()
-      .from(analyses)
-      .where(eq(analyses.jobId, jobId));
-    const existingMatchesMap = new Map(existingMatchRows.map((r) => [r.candidateId, mapAnalysisRow(r)]));
+    const candProfiles = await this.getCandidates(organizationId, jobId);
+    const existingMatches = await this.getMatches(organizationId, jobId);
+    const existingMatchesMap = new Map(existingMatches.map((m) => [m.candidateId, m]));
 
     const updatedMatches: MatchAnalysis[] = [];
 
@@ -464,14 +604,14 @@ export const Store = {
         newAnalysis.recruiterFeedback = existing.recruiterFeedback;
       }
 
-      await this.saveCandidateWithMatch(cand, newAnalysis);
+      await this.saveCandidateWithMatch(organizationId, cand, newAnalysis);
       updatedMatches.push(newAnalysis);
     }
 
-    await AuditLogger.recordEvent({
+    await AuditLogger.recordEvent(organizationId, {
       eventType: "weights_recalculated",
       jobId,
-      actor: {
+      actor: actor || {
         userId: "recruiter-default",
         userName: "Primary Recruiter",
         role: "RECRUITER",
@@ -486,12 +626,22 @@ export const Store = {
     return updatedMatches.sort((a, b) => b.overallScore - a.overallScore);
   },
 
+  /**
+   * Updates job requirements and re-evaluates candidates within the organization.
+   */
   async updateJobRequirements(
+    organizationId: string,
     jobId: string,
-    requirements: ExtractedJobRequirements
+    requirements: ExtractedJobRequirements,
+    actor?: { userId: string; userName: string; role: UserRole }
   ): Promise<{ job: Job; updatedCount: number } | null> {
     const db = await getDb();
-    const [jobRow] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1);
+    const [jobRow] = await db
+      .select()
+      .from(jobs)
+      .where(and(eq(jobs.id, jobId), eq(jobs.organizationId, organizationId)))
+      .limit(1);
+
     if (!jobRow) return null;
 
     const job = mapJobRow(jobRow);
@@ -504,19 +654,11 @@ export const Store = {
         version: jobRow.version + 1,
         updatedAt: new Date(),
       })
-      .where(eq(jobs.id, jobId));
+      .where(and(eq(jobs.id, jobId), eq(jobs.organizationId, organizationId)));
 
-    const candidateRows = await db
-      .select()
-      .from(candidates)
-      .where(eq(candidates.jobId, jobId));
-    const candProfiles = candidateRows.map(mapCandidateRow);
-
-    const existingMatchRows = await db
-      .select()
-      .from(analyses)
-      .where(eq(analyses.jobId, jobId));
-    const existingMatchesMap = new Map(existingMatchRows.map((r) => [r.candidateId, mapAnalysisRow(r)]));
+    const candProfiles = await this.getCandidates(organizationId, jobId);
+    const existingMatches = await this.getMatches(organizationId, jobId);
+    const existingMatchesMap = new Map(existingMatches.map((m) => [m.candidateId, m]));
 
     for (const cand of candProfiles) {
       const existing = existingMatchesMap.get(cand.id);
@@ -528,13 +670,13 @@ export const Store = {
         newAnalysis.pipelineStage = existing.pipelineStage;
         newAnalysis.recruiterFeedback = existing.recruiterFeedback;
       }
-      await this.saveCandidateWithMatch(cand, newAnalysis);
+      await this.saveCandidateWithMatch(organizationId, cand, newAnalysis);
     }
 
-    await AuditLogger.recordEvent({
+    await AuditLogger.recordEvent(organizationId, {
       eventType: "weights_recalculated",
       jobId,
-      actor: {
+      actor: actor || {
         userId: "recruiter-default",
         userName: "Primary Recruiter",
         role: "RECRUITER",
@@ -545,9 +687,14 @@ export const Store = {
     return { job, updatedCount: candProfiles.length };
   },
 
-  async resetDemoData(): Promise<{ job: Job; candidatesCount: number }> {
+  /**
+   * Seeds demo data explicitly into the demo organization.
+   */
+  async resetDemoData(
+    targetOrgId: string = DEMO_ORG_ID
+  ): Promise<{ job: Job; candidatesCount: number }> {
     const { jobId, candidateCount } = await seedDemoData();
-    const job = await this.getJob(jobId);
+    const job = await this.getJob(targetOrgId, jobId);
     if (!job) {
       throw new Error("Failed to load demo job after seeding");
     }

@@ -1,25 +1,105 @@
 /**
  * MatchLens AI - Explicit Demo Data Seeding Script
  * 
- * Explicitly seeds demo job and synthetic candidate profiles into PostgreSQL.
+ * Explicitly seeds demo organization, users, job, and synthetic candidate profiles into PostgreSQL.
  * Isolated from production request paths so synthetic data is never
  * automatically injected into real customer workspaces.
  */
 
 import { getDb, closeDb } from "./index";
-import { jobs, candidates, analyses, auditEvents } from "./schema";
+import { organizations, users, jobs, candidates, analyses, auditEvents } from "./schema";
 import { getSeededDemoCandidates } from "../demo-data";
+import bcrypt from "bcryptjs";
 
-export async function seedDemoData(): Promise<{ jobId: string; candidateCount: number }> {
+export const DEMO_ORG_ID = "org-demo-cloudscale";
+export const DEMO_RECRUITER_ID = "user-demo-recruiter";
+export const DEMO_ADMIN_ID = "user-demo-admin";
+
+export async function seedDemoData(): Promise<{
+  organizationId: string;
+  jobId: string;
+  candidateCount: number;
+}> {
   console.log("[Demo Seed] Starting explicit demo data seeding...");
   const db = await getDb();
   const { job, candidates: demoCandidates, matches } = getSeededDemoCandidates();
 
-  // Insert or update demo job
+  // 1. Seed demo organization
+  await db
+    .insert(organizations)
+    .values({
+      id: DEMO_ORG_ID,
+      name: "CloudScale Technologies",
+      slug: "cloudscale",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: organizations.id,
+      set: {
+        name: "CloudScale Technologies",
+        slug: "cloudscale",
+        updatedAt: new Date(),
+      },
+    });
+
+  console.log(`[Demo Seed] Seeded organization: ${DEMO_ORG_ID}`);
+
+  // 2. Seed demo users
+  const defaultPasswordHash = bcrypt.hashSync("MatchLens2026!", 10);
+
+  await db
+    .insert(users)
+    .values({
+      id: DEMO_ADMIN_ID,
+      organizationId: DEMO_ORG_ID,
+      email: "admin@cloudscale.internal",
+      name: "CloudScale Admin",
+      passwordHash: defaultPasswordHash,
+      role: "ADMIN",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: users.email,
+      set: {
+        name: "CloudScale Admin",
+        organizationId: DEMO_ORG_ID,
+        role: "ADMIN",
+        updatedAt: new Date(),
+      },
+    });
+
+  await db
+    .insert(users)
+    .values({
+      id: DEMO_RECRUITER_ID,
+      organizationId: DEMO_ORG_ID,
+      email: "recruiter@cloudscale.internal",
+      name: "Primary Recruiter",
+      passwordHash: defaultPasswordHash,
+      role: "RECRUITER",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: users.email,
+      set: {
+        name: "Primary Recruiter",
+        organizationId: DEMO_ORG_ID,
+        role: "RECRUITER",
+        updatedAt: new Date(),
+      },
+    });
+
+  console.log("[Demo Seed] Seeded demo users (admin & recruiter)");
+
+  // 3. Seed demo job
   await db
     .insert(jobs)
     .values({
       id: job.id,
+      organizationId: DEMO_ORG_ID,
       title: job.title,
       company: job.company,
       location: job.location,
@@ -35,6 +115,7 @@ export async function seedDemoData(): Promise<{ jobId: string; candidateCount: n
     .onConflictDoUpdate({
       target: jobs.id,
       set: {
+        organizationId: DEMO_ORG_ID,
         title: job.title,
         company: job.company,
         location: job.location,
@@ -46,12 +127,13 @@ export async function seedDemoData(): Promise<{ jobId: string; candidateCount: n
 
   console.log(`[Demo Seed] Seeded job: ${job.id}`);
 
-  // Insert candidates and analyses
+  // 4. Seed candidates and analyses
   for (const c of demoCandidates) {
     await db
       .insert(candidates)
       .values({
         id: c.id,
+        organizationId: DEMO_ORG_ID,
         jobId: c.jobId,
         name: c.name,
         email: c.email,
@@ -79,6 +161,7 @@ export async function seedDemoData(): Promise<{ jobId: string; candidateCount: n
       .onConflictDoUpdate({
         target: candidates.id,
         set: {
+          organizationId: DEMO_ORG_ID,
           name: c.name,
           email: c.email,
           skills: c.skills,
@@ -134,22 +217,27 @@ export async function seedDemoData(): Promise<{ jobId: string; candidateCount: n
     }
   }
 
-  // Record initial audit event
+  // 5. Record initial audit event
   await db.insert(auditEvents).values({
     id: `audit-${Date.now()}-seed`,
+    organizationId: DEMO_ORG_ID,
     eventType: "resume_uploaded",
     jobId: job.id,
     actor: {
-      userId: "system-seed",
-      userName: "System Initializer",
+      userId: DEMO_ADMIN_ID,
+      userName: "CloudScale Admin",
       role: "ADMIN",
     },
-    notes: `Seeded ${demoCandidates.length} benchmark demo candidates.`,
+    notes: `Seeded ${demoCandidates.length} benchmark demo candidates for organization ${DEMO_ORG_ID}.`,
     timestamp: new Date(),
   });
 
   console.log(`[Demo Seed] Successfully seeded ${demoCandidates.length} candidate profiles and analyses.`);
-  return { jobId: job.id, candidateCount: demoCandidates.length };
+  return {
+    organizationId: DEMO_ORG_ID,
+    jobId: job.id,
+    candidateCount: demoCandidates.length,
+  };
 }
 
 // Allow direct CLI execution: `npx tsx lib/db/seed.ts`

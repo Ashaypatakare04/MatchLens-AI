@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { runJudgeDemoCases } from "@/lib/engine/judge-cases";
 import { Store } from "@/lib/storage/store";
 import { DEMO_JOB } from "@/lib/demo-data";
+import { DEMO_ORG_ID } from "@/lib/db/seed";
 
 export async function GET() {
   try {
-    const job = (await Store.getJob(DEMO_JOB.id)) || DEMO_JOB;
+    const job = (await Store.getJob(DEMO_ORG_ID, DEMO_JOB.id)) || DEMO_JOB;
     const cases = runJudgeDemoCases(job);
     return NextResponse.json({ cases });
   } catch (err: unknown) {

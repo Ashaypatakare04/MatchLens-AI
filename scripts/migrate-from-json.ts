@@ -8,7 +8,7 @@
 import fs from "fs";
 import path from "path";
 import { getDb, closeDb } from "../lib/db";
-import { jobs, candidates, analyses, auditEvents } from "../lib/db/schema";
+import { organizations, jobs, candidates, analyses, auditEvents } from "../lib/db/schema";
 import { Job, CandidateProfile, MatchAnalysis } from "../lib/types";
 import { AuditEvent } from "../lib/engine/audit-logger";
 
@@ -30,6 +30,15 @@ export async function migrateFromJson(): Promise<{
   const dbFile = path.join(dataDir, "db.json");
   const auditFile = path.join(dataDir, "audit-log.json");
 
+  const targetOrgId = "org-demo-cloudscale";
+  await db.insert(organizations).values({
+    id: targetOrgId,
+    name: "CloudScale Systems",
+    slug: "cloudscale",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }).onConflictDoNothing();
+
   let jobsMigrated = 0;
   let candidatesMigrated = 0;
   let matchesMigrated = 0;
@@ -50,6 +59,7 @@ export async function migrateFromJson(): Promise<{
           .insert(jobs)
           .values({
             id: job.id,
+            organizationId: targetOrgId,
             title: job.title,
             company: job.company,
             location: job.location,
@@ -72,6 +82,7 @@ export async function migrateFromJson(): Promise<{
           .insert(candidates)
           .values({
             id: c.id,
+            organizationId: targetOrgId,
             jobId: c.jobId,
             name: c.name,
             email: c.email,
@@ -155,6 +166,7 @@ export async function migrateFromJson(): Promise<{
           .insert(auditEvents)
           .values({
             id: evt.id,
+            organizationId: targetOrgId,
             eventType: evt.eventType,
             jobId: evt.jobId,
             candidateId: evt.candidateId,

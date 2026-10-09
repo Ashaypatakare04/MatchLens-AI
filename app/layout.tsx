@@ -18,6 +18,8 @@ export const metadata: Metadata = {
     "ALGOTHON’26 ALG-AI-01: AI Resume & Job Matching System. Ranks candidates, explains every match with grounded resume citations, flags contradictory claims, and offers transparent configurable scoring.",
 };
 
+import { Providers } from "@/components/Providers";
+
 export default function RootLayout({
   children,
 }: {
@@ -29,7 +31,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

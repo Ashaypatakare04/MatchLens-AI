@@ -12,6 +12,7 @@
  */
 
 import { getDb, closeDb } from "../lib/db";
+import { organizations } from "../lib/db/schema";
 import { Store } from "../lib/storage/store";
 import { AuditLogger } from "../lib/engine/audit-logger";
 import { Job, CandidateProfile, MatchAnalysis } from "../lib/types";
@@ -42,6 +43,16 @@ async function runDatabasePhase1Tests() {
   const db = await getDb();
   assert(db !== null, "Database Initialization", "Connected to PostgreSQL / PGlite instance successfully.");
 
+  // Ensure test organization exists
+  const testOrgId = "org-test-phase1";
+  await db.insert(organizations).values({
+    id: testOrgId,
+    name: "Phase 1 Test Org",
+    slug: `phase1-test-org-${Date.now()}`,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }).onConflictDoNothing();
+
   // TEST 2: Job Creation & Fetch
   console.log("\n--- TEST 2: Job Creation & Persistence ---");
   const testJobId = `job-test-${Date.now()}`;
@@ -67,8 +78,8 @@ async function runDatabasePhase1Tests() {
     updatedAt: new Date().toISOString(),
   };
 
-  await Store.createJob(testJob);
-  const fetchedJob = await Store.getJob(testJobId);
+  await Store.createJob(testOrgId, testJob);
+  const fetchedJob = await Store.getJob(testOrgId, testJobId);
   assert(
     fetchedJob !== null && fetchedJob.id === testJobId && fetchedJob.title === "Senior Database Architect",
     "Job Persistence & Fetching",
@@ -193,9 +204,9 @@ async function runDatabasePhase1Tests() {
     analyzedAt: new Date().toISOString(),
   };
 
-  await Store.saveCandidateWithMatch(testCandidate, testMatch);
-  const fetchedCand = await Store.getCandidate(testCandId);
-  const fetchedMatch = await Store.getMatch(testCandId);
+  await Store.saveCandidateWithMatch(testOrgId, testCandidate, testMatch);
+  const fetchedCand = await Store.getCandidate(testOrgId, testCandId);
+  const fetchedMatch = await Store.getMatch(testOrgId, testCandId);
 
   assert(
     fetchedCand !== null && fetchedMatch !== null && fetchedMatch.overallScore === 92,
@@ -206,6 +217,7 @@ async function runDatabasePhase1Tests() {
   // TEST 4: Recruiter Decision Update & Audit Logging
   console.log("\n--- TEST 4: Recruiter Decision & Audit Event Trail ---");
   const updatedMatch = await Store.updateRecruiterDecision(
+    testOrgId,
     testCandId,
     "shortlisted",
     "Exceptional schema design and migration experience verified.",
@@ -227,7 +239,7 @@ async function runDatabasePhase1Tests() {
     `Updated decision to "${updatedMatch?.recruiterDecision}" and stage to "${updatedMatch?.pipelineStage}".`
   );
 
-  const candidateAuditHistory = await AuditLogger.getCandidateHistory(testCandId);
+  const candidateAuditHistory = await AuditLogger.getCandidateHistory(testOrgId, testCandId);
   assert(
     candidateAuditHistory.length >= 2,
     "Audit Log Persistence in PostgreSQL",
@@ -239,7 +251,7 @@ async function runDatabasePhase1Tests() {
   let concurrencyConflictCaught = false;
   try {
     // Attempt update with wrong expected version (e.g. expected: 999 instead of current)
-    await Store.updateJob(testJobId, { title: "Concurrent Overwrite Attempt" }, 999);
+    await Store.updateJob(testOrgId, testJobId, { title: "Concurrent Overwrite Attempt" }, 999);
   } catch {
     concurrencyConflictCaught = true;
   }
@@ -252,10 +264,10 @@ async function runDatabasePhase1Tests() {
 
   // TEST 6: Cascade Deletion
   console.log("\n--- TEST 6: Relational Foreign Key Cascade Deletion ---");
-  const deleteJobResult = await Store.deleteJob(testJobId);
-  const checkJobAfterDelete = await Store.getJob(testJobId);
-  const checkCandAfterDelete = await Store.getCandidate(testCandId);
-  const checkMatchAfterDelete = await Store.getMatch(testCandId);
+  const deleteJobResult = await Store.deleteJob(testOrgId, testJobId);
+  const checkJobAfterDelete = await Store.getJob(testOrgId, testJobId);
+  const checkCandAfterDelete = await Store.getCandidate(testOrgId, testCandId);
+  const checkMatchAfterDelete = await Store.getMatch(testOrgId, testCandId);
 
   assert(
     deleteJobResult === true &&

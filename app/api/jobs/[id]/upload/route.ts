@@ -4,14 +4,18 @@ import { extractDocumentFromBuffer } from "@/lib/parsers/document-extractor";
 import { extractCandidateProfileFromText } from "@/lib/extractor/resume-extractor";
 import { analyzeCandidate } from "@/lib/engine/analyzer";
 import { sanitizeFilename } from "@/lib/security/input-guard";
+import { requireOrganizationRole, handleAuthError } from "@/lib/auth/session";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const user = await requireOrganizationRole(req, ["ADMIN", "RECRUITER"]);
     const { id: jobId } = await params;
-    const job = await Store.getJob(jobId);
+
+    // Verify target job belongs to user's organization
+    const job = await Store.getJob(user.organizationId, jobId);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -23,7 +27,7 @@ export async function POST(
       return NextResponse.json({ error: "No files uploaded." }, { status: 400 });
     }
 
-    const existingCandidates = await Store.getCandidates(jobId);
+    const existingCandidates = await Store.getCandidates(user.organizationId, jobId);
     const existingHashes = new Set(existingCandidates.map((c) => c.fileHash));
 
     const results: Array<{
@@ -45,7 +49,7 @@ export async function POST(
         // Parse document with PDF / DOCX / TXT extractor
         const docResult = await extractDocumentFromBuffer(buffer, fileName);
 
-        // Check for duplicate resume
+        // Check for duplicate resume within this job
         if (existingHashes.has(docResult.fileHash)) {
           results.push({
             fileName,
@@ -70,8 +74,8 @@ export async function POST(
         // Analyze candidate against job requirements
         const match = analyzeCandidate(candidateProfile, job);
 
-        // Persist to Store
-        await Store.saveCandidateWithMatch(candidateProfile, match);
+        // Persist to Store under user's organization
+        await Store.saveCandidateWithMatch(user.organizationId, candidateProfile, match);
         existingHashes.add(docResult.fileHash);
 
         results.push({
@@ -98,7 +102,6 @@ export async function POST(
       results,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleAuthError(err);
   }
 }

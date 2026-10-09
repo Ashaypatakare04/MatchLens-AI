@@ -2,7 +2,7 @@
  * MatchLens AI - Relational Database Schema (Drizzle ORM / PostgreSQL)
  * 
  * Supports Organizations, Users, Jobs, Candidates, Analyses, and Audit Events
- * with primary keys, foreign keys, indexes, and optimistic locking.
+ * with multi-tenant isolation, primary keys, foreign keys, indexes, and optimistic locking.
  */
 
 import {
@@ -54,17 +54,20 @@ export const users = pgTable(
   "users",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "cascade",
-    }),
-    email: text("email").notNull(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    email: text("email").notNull().unique(),
     name: text("name").notNull(),
+    passwordHash: text("password_hash"),
     role: text("role").notNull().default("RECRUITER"), // "ADMIN" | "RECRUITER" | "VIEWER"
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    uniqueIndex("users_email_idx").on(table.email),
     index("users_org_email_idx").on(table.organizationId, table.email),
+    index("users_org_idx").on(table.organizationId),
   ]
 );
 
@@ -72,9 +75,9 @@ export const jobs = pgTable(
   "jobs",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "set null",
-    }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     company: text("company").notNull(),
     location: text("location").notNull(),
@@ -89,7 +92,7 @@ export const jobs = pgTable(
   },
   (table) => [
     index("jobs_org_idx").on(table.organizationId),
-    index("jobs_created_at_idx").on(table.createdAt),
+    index("jobs_org_created_at_idx").on(table.organizationId, table.createdAt),
   ]
 );
 
@@ -97,9 +100,9 @@ export const candidates = pgTable(
   "candidates",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "set null",
-    }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     jobId: text("job_id")
       .notNull()
       .references(() => jobs.id, { onDelete: "cascade" }),
@@ -127,9 +130,10 @@ export const candidates = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index("candidates_job_idx").on(table.jobId),
-    index("candidates_file_hash_idx").on(table.jobId, table.fileHash),
     index("candidates_org_idx").on(table.organizationId),
+    index("candidates_job_idx").on(table.jobId),
+    index("candidates_org_job_idx").on(table.organizationId, table.jobId),
+    index("candidates_file_hash_idx").on(table.jobId, table.fileHash),
   ]
 );
 
@@ -205,9 +209,9 @@ export const auditEvents = pgTable(
   "audit_events",
   {
     id: text("id").primaryKey(),
-    organizationId: text("organization_id").references(() => organizations.id, {
-      onDelete: "set null",
-    }),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     eventType: text("event_type").notNull(),
     jobId: text("job_id").notNull(),
     candidateId: text("candidate_id"),
@@ -226,6 +230,7 @@ export const auditEvents = pgTable(
     timestamp: timestamp("timestamp", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    index("audit_org_idx").on(table.organizationId),
     index("audit_job_idx").on(table.jobId),
     index("audit_candidate_idx").on(table.candidateId),
     index("audit_timestamp_idx").on(table.timestamp),
