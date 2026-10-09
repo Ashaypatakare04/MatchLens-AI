@@ -5,7 +5,7 @@ import { DEMO_JOB } from "@/lib/demo-data";
 
 export async function GET() {
   try {
-    const job = Store.getJob(DEMO_JOB.id) || DEMO_JOB;
+    const job = (await Store.getJob(DEMO_JOB.id)) || DEMO_JOB;
     const cases = runJudgeDemoCases(job);
     return NextResponse.json({ cases });
   } catch (err: unknown) {

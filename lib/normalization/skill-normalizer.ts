@@ -326,8 +326,9 @@ export function findEvidenceSnippet(fullText: string, term: string, maxLength: n
   const index = fullText.toLowerCase().indexOf(term.toLowerCase());
   if (index === -1) return "";
 
-  const start = Math.max(0, index - 50);
-  const end = Math.min(fullText.length, index + term.length + 90);
+  const radius = Math.max(30, Math.floor((maxLength - term.length) / 2));
+  const start = Math.max(0, index - radius);
+  const end = Math.min(fullText.length, index + term.length + radius);
   let snippet = fullText.substring(start, end).replace(/\s+/g, " ").trim();
   if (start > 0) snippet = "..." + snippet;
   if (end < fullText.length) snippet = snippet + "...";

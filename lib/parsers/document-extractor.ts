@@ -1,6 +1,11 @@
 import crypto from "crypto";
 import { parseDocxBuffer } from "./docx-parser";
 import { parsePdfBuffer } from "./pdf-parser";
+import {
+  sanitizeFilename,
+  validateUploadBuffer,
+  detectPromptInjection,
+} from "../security/input-guard";
 
 export interface ExtractedDocumentResult {
   text: string;
@@ -23,13 +28,12 @@ export async function extractDocumentFromBuffer(
   buffer: Buffer,
   fileName: string
 ): Promise<ExtractedDocumentResult> {
-  if (!buffer || buffer.length === 0) {
-    throw new Error(`File "${fileName}" is empty (0 bytes). Please upload a valid document containing resume text.`);
-  }
+  const safeFileName = sanitizeFilename(fileName);
+  validateUploadBuffer(buffer, safeFileName);
 
   const fileHash = computeBufferHash(buffer);
   const fileSize = buffer.length;
-  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  const ext = safeFileName.split(".").pop()?.toLowerCase() || "";
   const warnings: string[] = [];
 
   let text = "";
@@ -50,12 +54,18 @@ export async function extractDocumentFromBuffer(
     text = buffer.toString("utf-8");
   } else {
     throw new Error(
-      `Unsupported file format ".${ext}" for "${fileName}". Please upload candidate resumes in standard PDF, DOCX, or TXT format.`
+      `Unsupported file format ".${ext}" for "${safeFileName}". Please upload candidate resumes in standard PDF, DOCX, or TXT format.`
     );
   }
 
+  // Check for adversarial prompt injection attempts in raw resume text
+  const injectionCheck = detectPromptInjection(text);
+  if (injectionCheck.isSuspicious) {
+    warnings.push("Adversarial prompt injection pattern detected and neutralized.");
+  }
+
   // Clean messy characters while preserving paragraph breaks
-  const sanitizedText = sanitizeResumeText(text);
+  const sanitizedText = sanitizeResumeText(injectionCheck.sanitizedText);
 
   let confidence: "high" | "medium" | "low" = "high";
 

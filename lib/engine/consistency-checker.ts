@@ -2,14 +2,13 @@ import { CandidateProfile, PotentialInconsistency } from "../types";
 import { detectEmploymentOverlaps } from "../normalization/date-timeline";
 
 /**
- * ALG-AI-01 Bonus Engine: Detects suspicious, unsupported, or contradictory claims.
+ * MatchLens Integrity Engine: Detects suspicious, unsupported, or contradictory claims.
  * Uses objective, respectful language focused on verification rather than accusatory labels.
  */
 export function checkProfileConsistency(
   candidate: CandidateProfile
 ): PotentialInconsistency[] {
   const inconsistencies: PotentialInconsistency[] = [];
-  const rawLower = candidate.rawResumeText.toLowerCase();
 
   // 1. Contradictory Employment Dates (Overlaps)
   const overlaps = detectEmploymentOverlaps(candidate.workHistory);

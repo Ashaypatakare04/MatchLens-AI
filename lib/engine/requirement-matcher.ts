@@ -21,15 +21,13 @@ import {
   Job,
   RequirementMatchItem,
   RequirementMatchType,
-  WorkExperienceItem,
   MatchedSkill,
   EvidenceItem,
   ResponsibilityMatchItem,
 } from "../types";
 import { SemanticEngine } from "./semantic-similarity";
-import { classifySkillEvidence, EvidenceLevel } from "./evidence-classifier";
+import { classifySkillEvidence } from "./evidence-classifier";
 import { evaluateTransferableSkill } from "../normalization/transferable-engine";
-import { normalizeSkill } from "../normalization/skill-normalizer";
 
 export interface FullRequirementAnalysis {
   requirementMatches: RequirementMatchItem[];
@@ -66,8 +64,6 @@ export async function evaluateRequirementsAgainstCandidate(
   const evidenceLog: EvidenceItem[] = [];
   const strongMatches: string[] = [];
   const missingRequirements: string[] = [];
-
-  const rawResumeLower = candidate.rawResumeText.toLowerCase();
 
   // ================= 1. REQUIRED SKILLS EVALUATION =================
   let requiredSkillsPoints = 0;

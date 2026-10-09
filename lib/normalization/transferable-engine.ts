@@ -69,7 +69,7 @@ const TRANSFERABLE_RELATIONSHIPS: TechnologyCounterpart[] = [
     baseTransferRatio: 0.65,
     requiredContextTerms: ["backend", "api", "microservice", "service", "rest", "server", "http", "endpoints"],
     rationaleTemplate: (source, target) =>
-      `Candidate has backend software engineering tenure in ${source}. Distributed service design, RESTful API conventions, and asynchronous I/O architectures translate across runtimes, though Node runtime idioms will require ramp-up.`,
+      `Candidate has backend software engineering tenure in ${source}. Distributed service design, RESTful API conventions, and asynchronous I/O architectures translate across runtimes, though ${target} runtime idioms will require ramp-up.`,
   },
   {
     target: "Kubernetes",

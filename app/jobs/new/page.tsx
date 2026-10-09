@@ -7,11 +7,8 @@ import {
   Briefcase,
   Building2,
   MapPin,
-  Check,
   Plus,
   X,
-  FileText,
-  Sliders,
   ArrowRight,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";

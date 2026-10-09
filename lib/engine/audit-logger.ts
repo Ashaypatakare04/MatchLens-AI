@@ -1,0 +1,126 @@
+/**
+ * MatchLens AI - Auditable Decision History & Event Logger
+ * 
+ * Records immutable, structured audit trail events for:
+ * - Recruiter decisions & stage changes (with previous & new states, reason codes)
+ * - Scoring weight adjustments and recalculations
+ * - Candidate uploads & cryptographic hash deduplication
+ * - Verification flag actions (confirmed, dismissed, notes)
+ * 
+ * Safe logging: NEVER logs full raw resume text or sensitive PII.
+ * Persisted to PostgreSQL relational audit_events table.
+ */
+
+import { getDb } from "../db";
+import { auditEvents } from "../db/schema";
+import { desc, eq, and, SQL } from "drizzle-orm";
+
+export type AuditEventType =
+  | "candidate_decision_changed"
+  | "candidate_stage_changed"
+  | "weights_recalculated"
+  | "resume_uploaded"
+  | "verification_flag_updated"
+  | "candidate_note_added"
+  | "candidate_exported"
+  | "candidate_deleted"
+  | "recruiter_calibration_feedback";
+
+export interface AuditEvent {
+  id: string;
+  eventType: AuditEventType;
+  jobId: string;
+  candidateId?: string;
+  actor: {
+    userId: string;
+    userName: string;
+    role: "ADMIN" | "RECRUITER" | "VIEWER";
+  };
+  previousState?: string;
+  newState?: string;
+  reasonCategory?: string;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+}
+
+export const AuditLogger = {
+  async recordEvent(
+    event: Omit<AuditEvent, "id" | "timestamp">
+  ): Promise<AuditEvent> {
+    const id = `audit-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date();
+
+    const newEvent: AuditEvent = {
+      ...event,
+      id,
+      timestamp: now.toISOString(),
+    };
+
+    try {
+      const db = await getDb();
+      await db.insert(auditEvents).values({
+        id,
+        eventType: event.eventType,
+        jobId: event.jobId,
+        candidateId: event.candidateId || null,
+        actor: event.actor,
+        previousState: event.previousState || null,
+        newState: event.newState || null,
+        reasonCategory: event.reasonCategory || null,
+        notes: event.notes || null,
+        metadata: event.metadata || null,
+        timestamp: now,
+      });
+    } catch (err) {
+      console.error("[AuditLogger] Failed to write audit event to database:", err);
+    }
+
+    return newEvent;
+  },
+
+  async getEvents(filter?: {
+    jobId?: string;
+    candidateId?: string;
+  }): Promise<AuditEvent[]> {
+    try {
+      const db = await getDb();
+      const conditions: SQL[] = [];
+
+      if (filter?.jobId) {
+        conditions.push(eq(auditEvents.jobId, filter.jobId));
+      }
+      if (filter?.candidateId) {
+        conditions.push(eq(auditEvents.candidateId, filter.candidateId));
+      }
+
+      const rows = await db
+        .select()
+        .from(auditEvents)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(auditEvents.timestamp))
+        .limit(200);
+
+      return rows.map((r) => ({
+        id: r.id,
+        eventType: r.eventType as AuditEventType,
+        jobId: r.jobId,
+        candidateId: r.candidateId || undefined,
+        actor: r.actor as AuditEvent["actor"],
+        previousState: r.previousState || undefined,
+        newState: r.newState || undefined,
+        reasonCategory: r.reasonCategory || undefined,
+        notes: r.notes || undefined,
+        metadata: (r.metadata as Record<string, unknown>) || undefined,
+        timestamp: r.timestamp.toISOString(),
+      }));
+    } catch (err) {
+      console.error("[AuditLogger] Failed to query audit events:", err);
+      return [];
+    }
+  },
+
+  async getCandidateHistory(candidateId: string): Promise<AuditEvent[]> {
+    return this.getEvents({ candidateId });
+  },
+};

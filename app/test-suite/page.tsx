@@ -5,11 +5,7 @@ import {
   ShieldAlert,
   CheckCircle2,
   XCircle,
-  Play,
   RefreshCw,
-  Sparkles,
-  Info,
-  ChevronRight,
   ShieldCheck,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
@@ -37,7 +33,23 @@ export default function TestSuitePage() {
   };
 
   useEffect(() => {
-    runTests();
+    let ignore = false;
+    const loadTests = async () => {
+      try {
+        const res = await fetch("/api/edge-cases/run", { method: "POST" });
+        if (res.ok && !ignore) {
+          const json = await res.json();
+          setTests(json.tests || []);
+          setTotalPassed(json.passed || 0);
+        }
+      } catch (err) {
+        console.error("Test runner error:", err);
+      }
+    };
+    loadTests();
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   return (
@@ -49,7 +61,7 @@ export default function TestSuitePage() {
           <div>
             <div className="flex items-center space-x-2 text-xs text-indigo-600 font-semibold mb-1">
               <ShieldAlert className="w-4 h-4" />
-              <span>ALGOTHON’26 Evaluation &amp; Robustness Verification</span>
+              <span>Production Reliability &amp; Robustness Verification</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
               Edge Cases &amp; Reliability Suite

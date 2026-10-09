@@ -5,7 +5,7 @@ import { DEMO_JOB_ID } from "@/lib/demo-data";
 
 export async function POST() {
   try {
-    const job = Store.getJob(DEMO_JOB_ID);
+    const job = await Store.getJob(DEMO_JOB_ID);
     const results = await runAllEdgeCases(job || undefined);
     const passedCount = results.filter((r) => r.result?.passed).length;
 

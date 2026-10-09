@@ -6,12 +6,17 @@ export async function GET() {
   return NextResponse.json({
     status,
     system: {
-      name: "MatchLens-AI",
-      version: "1.0.0-hackathon-prod",
-      hackathonTrack: "ALGOTHON’26 — ALG-AI-01",
-      matchingPipeline: "Hybrid (Deterministic + Semantic Normalization + Inconsistency Detection)",
+      name: "MatchLens AI",
+      version: "1.0.0-enterprise",
+      edition: "Recruiter Decision Support Workspace",
+      matchingPipeline: "Hybrid (Deterministic Weighted Scoring + Semantic Normalization + Integrity Verification)",
       supportedFormats: ["PDF", "DOCX", "TXT"],
-      bonusModule: "ALG-AI-01 Unsupported & Contradictory Claim Detection (Active)",
+      integrityEngine: "Multi-factor claim verification, date consistency & tenure reconciliation",
+      securityStandards: {
+        promptInjectionDefense: "Active (Input-fence & Sanitization Guard)",
+        fileUploadLimits: "10 MB maximum, magic-bytes verified",
+        deterministicScoring: "Strict (LLM cannot alter scores)",
+      },
     },
   });
 }

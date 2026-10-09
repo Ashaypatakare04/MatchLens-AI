@@ -1,16 +1,10 @@
 import Link from "next/link";
 import {
   ArrowRight,
-  ShieldAlert,
   CheckCircle2,
-  FileText,
   Sliders,
   AlertTriangle,
-  Award,
-  ChevronRight,
   Cpu,
-  Layers,
-  Search,
   Check,
   Scale,
 } from "lucide-react";

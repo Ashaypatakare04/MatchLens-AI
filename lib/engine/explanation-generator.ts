@@ -92,6 +92,18 @@ export function generateExplainableSummary(
     );
   }
 
+  // 6. Evidence Depth Overview
+  if (requirementMatches && requirementMatches.length > 0) {
+    const highEvidenceCount = requirementMatches.filter(
+      (rm) => (rm.evidenceLevel ?? 0) >= 4
+    ).length;
+    if (highEvidenceCount > 0) {
+      points.push(
+        `Evidence Confidence: ${highEvidenceCount} requirement(s) substantiated with Level 4/5 production-grade evidence.`
+      );
+    }
+  }
+
   const explanation = points.join("\n\n");
 
   return {

@@ -419,7 +419,7 @@ export class SemanticEngine {
             },
           };
         }
-      } catch (e) {
+      } catch {
         // Fall back to local calculation
       }
     }

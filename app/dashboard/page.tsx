@@ -11,7 +11,6 @@ import {
   TrendingUp,
   PlusCircle,
   FileUp,
-  RotateCcw,
   Sparkles,
   ExternalLink,
 } from "lucide-react";
@@ -27,39 +26,40 @@ interface DashboardData {
 
 export default function RecruiterDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/jobs");
-      const jobJson = await res.json();
-      const jobs: Job[] = jobJson.jobs || [];
-
-      // Fetch candidates for primary job
-      if (jobs.length > 0) {
-        const primaryJob = jobs[0];
-        const candRes = await fetch(`/api/jobs/${primaryJob.id}/candidates`);
-        const candJson = await candRes.json();
-        const candPairs = candJson.candidates || [];
-
-        setData({
-          jobs,
-          candidates: candPairs.map((p: { candidate: CandidateProfile }) => p.candidate),
-          matches: candPairs.map((p: { match: MatchAnalysis }) => p.match),
-        });
-      } else {
-        setData({ jobs: [], candidates: [], matches: [] });
-      }
-    } catch (err) {
-      console.error("Failed to load dashboard data:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    fetchDashboardData();
+    let isMounted = true;
+    async function loadData() {
+      try {
+        const res = await fetch("/api/jobs");
+        const jobJson = await res.json();
+        const jobs: Job[] = jobJson.jobs || [];
+
+        // Fetch candidates for primary job
+        if (jobs.length > 0) {
+          const primaryJob = jobs[0];
+          const candRes = await fetch(`/api/jobs/${primaryJob.id}/candidates`);
+          const candJson = await candRes.json();
+          const candPairs = candJson.candidates || [];
+
+          if (isMounted) {
+            setData({
+              jobs,
+              candidates: candPairs.map((p: { candidate: CandidateProfile }) => p.candidate),
+              matches: candPairs.map((p: { match: MatchAnalysis }) => p.match),
+            });
+          }
+        } else if (isMounted) {
+          setData({ jobs: [], candidates: [], matches: [] });
+        }
+      } catch (err) {
+        console.error("Failed to load dashboard data:", err);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const totalResumes = data?.candidates.length || 0;
@@ -174,7 +174,7 @@ export default function RecruiterDashboard() {
               </span>
               <AlertTriangle className="w-4 h-4 text-amber-500" />
             </div>
-            <p className="text-[11px] text-amber-600 font-medium">ALG-AI-01 Inconsistencies</p>
+            <p className="text-[11px] text-amber-600 font-medium">Integrity Verification Flags</p>
           </div>
 
           <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">

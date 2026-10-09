@@ -1,29 +1,27 @@
 "use client";
 
-import { PotentialInconsistency } from "@/lib/types";
+import { PotentialInconsistency, InconsistencyType } from "@/lib/types";
 import { AlertTriangle, Clock, HelpCircle, Calendar, ShieldCheck } from "lucide-react";
 
 interface InconsistencyCardProps {
   inconsistency: PotentialInconsistency;
 }
 
+function renderInconsistencyIcon(type: InconsistencyType, className: string) {
+  switch (type) {
+    case "contradictory_dates":
+      return <Calendar className={className} />;
+    case "experience_mismatch":
+      return <Clock className={className} />;
+    case "unsupported_claim":
+      return <HelpCircle className={className} />;
+    default:
+      return <AlertTriangle className={className} />;
+  }
+}
+
 export function InconsistencyCard({ inconsistency }: InconsistencyCardProps) {
   const isHigh = inconsistency.severity === "high";
-
-  const getIcon = () => {
-    switch (inconsistency.type) {
-      case "contradictory_dates":
-        return Calendar;
-      case "experience_mismatch":
-        return Clock;
-      case "unsupported_claim":
-        return HelpCircle;
-      default:
-        return AlertTriangle;
-    }
-  };
-
-  const Icon = getIcon();
 
   return (
     <div
@@ -41,7 +39,7 @@ export function InconsistencyCard({ inconsistency }: InconsistencyCardProps) {
               : "bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400"
           }`}
         >
-          <Icon className="w-5 h-5 flex-shrink-0" />
+          {renderInconsistencyIcon(inconsistency.type, "w-5 h-5 flex-shrink-0")}
         </div>
 
         <div className="flex-1 space-y-2">
@@ -61,7 +59,7 @@ export function InconsistencyCard({ inconsistency }: InconsistencyCardProps) {
               </span>
             </div>
             <span className="text-[11px] text-slate-500 font-mono">
-              ALG-AI-01 Bonus Detector
+              Integrity Verification Guard
             </span>
           </div>
 

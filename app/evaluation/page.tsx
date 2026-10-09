@@ -1,34 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
 import {
   Sparkles,
-  ShieldCheck,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   RefreshCw,
-  Cpu,
-  ArrowRight,
-  Sliders,
   Scale,
-  Layers,
-  ChevronRight,
   TrendingUp,
-  FileCode,
   Zap,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
-import { BenchmarkTestCase, BenchmarkSuiteSummary } from "@/lib/engine/benchmark-service";
+import { BenchmarkSuiteSummary } from "@/lib/engine/benchmark-service";
 import { JudgeTestCase } from "@/lib/engine/judge-cases";
-import { SemanticEngine } from "@/lib/engine/semantic-similarity";
 
 export default function EvaluationDashboardPage() {
   const [activeTab, setActiveTab] = useState<"benchmark" | "judge_cases" | "sandbox">("benchmark");
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkSuiteSummary | null>(null);
   const [judgeCases, setJudgeCases] = useState<JudgeTestCase[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isRunningBenchmark, setIsRunningBenchmark] = useState(false);
 
   // Sandbox state
@@ -60,22 +50,31 @@ export default function EvaluationDashboardPage() {
     }
   };
 
-  const fetchJudgeCases = async () => {
-    try {
-      const res = await fetch("/api/judge-demo");
-      if (res.ok) {
-        const data = await res.json();
-        setJudgeCases(data.cases || []);
-      }
-    } catch (err) {
-      console.error("Failed to load judge cases:", err);
-    }
-  };
-
   useEffect(() => {
-    Promise.all([fetchBenchmark(), fetchJudgeCases()]).then(() => {
-      setLoading(false);
-    });
+    let isMounted = true;
+    async function loadInitialData() {
+      try {
+        const [benchRes, judgeRes] = await Promise.all([
+          fetch("/api/benchmark"),
+          fetch("/api/judge-demo"),
+        ]);
+        if (!isMounted) return;
+        if (benchRes.ok) {
+          const benchData = await benchRes.json();
+          setBenchmarkData(benchData);
+        }
+        if (judgeRes.ok) {
+          const judgeData = await judgeRes.json();
+          setJudgeCases(judgeData.cases || []);
+        }
+      } catch (err) {
+        console.error("Failed to load evaluation data:", err);
+      }
+    }
+    loadInitialData();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleRunSandbox = async () => {
@@ -89,7 +88,7 @@ export default function EvaluationDashboardPage() {
       const exactMatch = textLower.includes(sandboxReq.toLowerCase());
 
       // Fetch semantic similarity via benchmark endpoint or local projection
-      const simRes = await fetch("/api/benchmark", {
+      await fetch("/api/benchmark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenarioIndex: 3 }), // fallback query

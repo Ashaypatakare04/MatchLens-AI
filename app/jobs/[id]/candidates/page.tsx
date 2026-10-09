@@ -1,30 +1,28 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
   Users,
   Search,
   SlidersHorizontal,
   ArrowUpDown,
-  Filter,
   CheckCircle2,
   AlertTriangle,
   ArrowRight,
-  ExternalLink,
   Table as TableIcon,
   LayoutGrid,
   Scale,
-  Sparkles,
   ChevronRight,
-  FileText,
+  ShieldCheck,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { WeightsModal } from "@/components/WeightsModal";
-import { Job, CandidateProfile, MatchAnalysis, ScoringWeights } from "@/lib/types";
+import { Job, CandidateProfile, MatchAnalysis, RecruiterDecision } from "@/lib/types";
 import { DEFAULT_WEIGHTS } from "@/lib/extractor/job-extractor";
+import { anonymizeCandidateProfile } from "@/lib/security/anonymizer";
 
 interface CandidatePair {
   candidate: CandidateProfile;
@@ -33,7 +31,6 @@ interface CandidatePair {
 
 export default function CandidateRankingPage() {
   const params = useParams();
-  const router = useRouter();
   const jobId = (params.id as string) || "job-cloudscale-sr-fullstack";
 
   const [job, setJob] = useState<Job | null>(null);
@@ -46,7 +43,9 @@ export default function CandidateRankingPage() {
   const [recommendationFilter, setRecommendationFilter] = useState("all");
   const [warningFilter, setWarningFilter] = useState("all");
   const [decisionFilter, setDecisionFilter] = useState("all");
+  const [stageFilter, setStageFilter] = useState("all");
   const [selectedSkillFilter, setSelectedSkillFilter] = useState("all");
+  const [anonymizedMode, setAnonymizedMode] = useState(false);
   const [sortBy, setSortBy] = useState<"overallScore" | "skills" | "experience" | "education" | "name">("overallScore");
   const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
 
@@ -58,34 +57,37 @@ export default function CandidateRankingPage() {
 
   // Weights modal state
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
-
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const jobRes = await fetch(`/api/jobs/${jobId}`);
-      if (jobRes.ok) {
-        const jobJson = await jobRes.json();
-        setJob(jobJson.job);
-      }
-
-      const candRes = await fetch(`/api/jobs/${jobId}/candidates`);
-      if (candRes.ok) {
-        const candJson = await candRes.json();
-        setCandidates(candJson.candidates || []);
-      }
-    } catch (err) {
-      console.error("Failed to load candidate ranking:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [refreshIndex, setRefreshIndex] = useState(0);
 
   useEffect(() => {
-    fetchData();
-  }, [jobId]);
+    let isMounted = true;
+    async function loadCandidateData() {
+      try {
+        const jobRes = await fetch(`/api/jobs/${jobId}`);
+        if (jobRes.ok) {
+          const jobJson = await jobRes.json();
+          if (isMounted) setJob(jobJson.job);
+        }
+
+        const candRes = await fetch(`/api/jobs/${jobId}/candidates`);
+        if (candRes.ok) {
+          const candJson = await candRes.json();
+          if (isMounted) setCandidates(candJson.candidates || []);
+        }
+      } catch (err) {
+        console.error("Failed to load candidate ranking:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+    loadCandidateData();
+    return () => {
+      isMounted = false;
+    };
+  }, [jobId, refreshIndex]);
 
   // Handle Quick Decision Toggle directly from list
-  const handleQuickDecision = async (candidateId: string, decision: "shortlisted" | "rejected" | "maybe" | "unreviewed") => {
+  const handleQuickDecision = async (candidateId: string, decision: RecruiterDecision) => {
     try {
       const res = await fetch(`/api/jobs/${jobId}/candidates/${candidateId}`, {
         method: "PATCH",
@@ -158,6 +160,12 @@ export default function CandidateRankingPage() {
           if (match.recruiterDecision !== decisionFilter) return false;
         }
 
+        // Pipeline Stage
+        if (stageFilter !== "all") {
+          const currentStage = match.pipelineStage || "screening";
+          if (currentStage !== stageFilter) return false;
+        }
+
         // Skill
         if (selectedSkillFilter !== "all") {
           const hasSkill = match.skillsAnalysis.requiredMatched.some(
@@ -211,6 +219,7 @@ export default function CandidateRankingPage() {
     recommendationFilter,
     warningFilter,
     decisionFilter,
+    stageFilter,
     selectedSkillFilter,
     sortBy,
     sortOrder,
@@ -240,6 +249,19 @@ export default function CandidateRankingPage() {
             </div>
 
             <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setAnonymizedMode((prev) => !prev)}
+                className={`inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition ${
+                  anonymizedMode
+                    ? "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800 shadow-sm"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50"
+                }`}
+                title="Toggle Blind Screening Mode to mask candidate names and institutional pedigree"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+                <span>{anonymizedMode ? "Anonymized: ON" : "Blind Screening"}</span>
+              </button>
+
               <button
                 onClick={() => setIsWeightsOpen(true)}
                 className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold border border-slate-300 dark:border-slate-700 transition"
@@ -333,6 +355,20 @@ export default function CandidateRankingPage() {
                 <option value="clean">✓ Verified / Clean</option>
               </select>
 
+              {/* Stage Filter */}
+              <select
+                value={stageFilter}
+                onChange={(e) => setStageFilter(e.target.value)}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300"
+              >
+                <option value="all">All Pipeline Stages</option>
+                <option value="screening">Stage: Screening</option>
+                <option value="technical_review">Stage: Tech Review</option>
+                <option value="interview">Stage: Interview Loop</option>
+                <option value="offer">Stage: Offer</option>
+                <option value="archived">Stage: Archived</option>
+              </select>
+
               {/* Decision Filter */}
               <select
                 value={decisionFilter}
@@ -341,10 +377,27 @@ export default function CandidateRankingPage() {
               >
                 <option value="all">All Recruiter Decisions</option>
                 <option value="shortlisted">Shortlisted</option>
-                <option value="maybe">Maybe</option>
+                <option value="request_interview">Tech Screen</option>
+                <option value="request_code_sample">Code Sample</option>
+                <option value="maybe">Hold / Maybe</option>
+                <option value="needs_verification">Needs Verification</option>
                 <option value="rejected">Rejected</option>
                 <option value="unreviewed">Unreviewed</option>
               </select>
+
+              {/* Skill Filter */}
+              {job?.requirements.requiredSkills && job.requirements.requiredSkills.length > 0 && (
+                <select
+                  value={selectedSkillFilter}
+                  onChange={(e) => setSelectedSkillFilter(e.target.value)}
+                  className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-300"
+                >
+                  <option value="all">All Skills</option>
+                  {job.requirements.requiredSkills.map((sk) => (
+                    <option key={sk} value={sk}>Has: {sk}</option>
+                  ))}
+                </select>
+              )}
 
               {/* Sort selector */}
               <div className="flex items-center space-x-1 pl-2 border-l border-slate-200 dark:border-slate-700">
@@ -466,7 +519,10 @@ export default function CandidateRankingPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredCandidates.map(({ candidate, match }, index) => {
+                  {filteredCandidates.map(({ candidate: rawCandidate, match }, index) => {
+                    const candidate = anonymizedMode
+                      ? anonymizeCandidateProfile(rawCandidate, index + 1)
+                      : rawCandidate;
                     const isSelected = selectedForCompare.includes(candidate.id);
                     const hasFlags = match.potentialInconsistencies.length > 0;
 
@@ -595,11 +651,11 @@ export default function CandidateRankingPage() {
                         {/* Recruiter Decision Pill / Toggle */}
                         <td className="p-3">
                           <select
-                            value={match.recruiterDecision}
+                            value={match.recruiterDecision || "unreviewed"}
                             onChange={(e) =>
                               handleQuickDecision(
                                 candidate.id,
-                                e.target.value as "shortlisted" | "rejected" | "maybe" | "unreviewed"
+                                e.target.value as RecruiterDecision
                               )
                             }
                             className={`px-2 py-1 rounded text-[11px] font-semibold border cursor-pointer ${
@@ -609,12 +665,21 @@ export default function CandidateRankingPage() {
                                 ? "bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950 dark:text-rose-200"
                                 : match.recruiterDecision === "maybe"
                                 ? "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950 dark:text-amber-200"
+                                : match.recruiterDecision === "request_interview"
+                                ? "bg-indigo-50 text-indigo-800 border-indigo-300 dark:bg-indigo-950 dark:text-indigo-200"
+                                : match.recruiterDecision === "request_code_sample"
+                                ? "bg-cyan-50 text-cyan-800 border-cyan-300 dark:bg-cyan-950 dark:text-cyan-200"
+                                : match.recruiterDecision === "needs_verification"
+                                ? "bg-purple-50 text-purple-800 border-purple-300 dark:bg-purple-950 dark:text-purple-200"
                                 : "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300"
                             }`}
                           >
                             <option value="unreviewed">Unreviewed</option>
                             <option value="shortlisted">Shortlisted</option>
-                            <option value="maybe">Maybe</option>
+                            <option value="request_interview">Request Interview</option>
+                            <option value="request_code_sample">Request Code Sample</option>
+                            <option value="needs_verification">Needs Verification</option>
+                            <option value="maybe">Hold / Maybe</option>
                             <option value="rejected">Rejected</option>
                           </select>
                         </td>
@@ -639,7 +704,10 @@ export default function CandidateRankingPage() {
         ) : (
           /* Card View */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredCandidates.map(({ candidate, match }, index) => {
+            {filteredCandidates.map(({ candidate: rawCandidate, match }, index) => {
+              const candidate = anonymizedMode
+                ? anonymizeCandidateProfile(rawCandidate, index + 1)
+                : rawCandidate;
               const isSelected = selectedForCompare.includes(candidate.id);
               const hasFlags = match.potentialInconsistencies.length > 0;
 
@@ -763,7 +831,7 @@ export default function CandidateRankingPage() {
             initialWeights={job.weights || DEFAULT_WEIGHTS}
             isOpen={isWeightsOpen}
             onClose={() => setIsWeightsOpen(false)}
-            onUpdated={fetchData}
+            onUpdated={() => setRefreshIndex((k) => k + 1)}
           />
         )}
       </main>

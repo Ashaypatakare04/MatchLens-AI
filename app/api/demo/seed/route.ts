@@ -3,7 +3,7 @@ import { Store } from "@/lib/storage/store";
 
 export async function POST() {
   try {
-    const result = Store.resetDemoData();
+    const result = await Store.resetDemoData();
     return NextResponse.json({
       success: true,
       job: result.job,

@@ -8,8 +8,8 @@ export async function GET(
 ) {
   try {
     const { id: jobId } = await params;
-    const candidates = Store.getCandidates(jobId);
-    const matches = Store.getMatches(jobId);
+    const candidates = await Store.getCandidates(jobId);
+    const matches = await Store.getMatches(jobId);
 
     const matchMap = new Map(matches.map((m) => [m.candidateId, m]));
 

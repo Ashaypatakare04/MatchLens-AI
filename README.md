@@ -4,8 +4,11 @@
 > **MatchLens AI — Evidence-backed candidate matching for faster, more trustworthy hiring.**  
 > *MatchLens doesn't just rank candidates. It explains the exact contextual evidence behind every requirement, credits substantiated transferable skills, discounts unsubstantiated buzzword lists, and flags claims requiring human recruiter verification.*
 
-[![Test Suite](https://img.shields.io/badge/Edge%20Cases-12%2F12%20PASS-brightgreen)](#11-automated-edge-cases--reliability-suite-12-tests)
+[![Test Suite](https://img.shields.io/badge/Reliability%20Suite-15%2F15%20PASS-brightgreen)](#11-automated-reliability--security-suite-15-tests)
 [![AI Benchmark](https://img.shields.io/badge/AI%20Benchmark-8%2F8%20PASS%20(100%25%20Win%20Rate)-blue)](#9-ai-evaluation--benchmark-suite-proving-semantic-beats-keywords)
+[![Security Guard](https://img.shields.io/badge/Security-Input%20Guards%20Active-emerald)](#8c-production-security--untrusted-data-guard)
+[![Blind Screening](https://img.shields.io/badge/Blind%20Screening-Bias%20Shield%20Active-purple)](#8d-blind-screening-mode-pedigree--name-anonymization)
+[![Compliance](https://img.shields.io/badge/Audit%20Log-GDPR%20Ready-blueviolet)](#8b-auditable-recruiter-decision-history--governance)
 [![Build](https://img.shields.io/badge/Next.js%2016-Build%20Passing-success)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0%20Strict-blue)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/License-MIT-gray)](LICENSE)
@@ -176,6 +179,90 @@ Where $C = \{\text{Skills}, \text{Experience}, \text{Responsibilities}, \text{Pr
 
 ---
 
+## 8A. Score Deficit Analysis (“Why Didn’t This Candidate Score Higher?”)
+
+Located at `lib/engine/deficit-calculator.ts` and rendered in the candidate inspection workspace:
+- **Mathematical Deduction Accounting**: Rather than presenting an arbitrary score (e.g., $84/100$) without context, MatchLens explicitly accounts for the exact $(100 - \text{Score})$ deficit with itemized negative points:
+  - Missing direct required skills (e.g. `-6.0 pts: Missing Kubernetes`)
+  - Transferable credit ceilings (e.g. `-2.1 pts: AWS fulfilled via Azure transferable credit ceiling`)
+  - Unsubstantiated buzzwords (e.g. `-3.5 pts: React listed in skills summary with no production history`)
+  - Engineering tenure deficits (e.g. `-4.2 pts: 3.5 yrs verified software tenure vs 5.0 yrs required`)
+- **Actionable Recruiter Guidance**: For each deficit item, the system suggests a concrete interview question or verification task to validate whether candidate actually possesses the capability.
+
+---
+
+## 8B. Auditable Recruiter Decision History & Governance
+
+Located at `lib/engine/audit-logger.ts` and rendered in the candidate timeline:
+- **Tamper-Evident Local Event Log**: Records every state transition (`shortlisted`, `maybe`, `rejected`, `unreviewed`), scoring weight reconfiguration, and recruiter evaluation notes.
+- **Timestamped Audit Trail**: Displays the user/recruiter ID, previous state, updated state, rationale notes, and timestamp to satisfy enterprise compliance and hiring committee review requirements.
+
+---
+
+## 8C. Production Security & Untrusted Data Guard
+
+Located at `lib/security/input-guard.ts`:
+- **Untrusted Data Isolation**: All resumes and job descriptions are strictly treated as untrusted input.
+- **File Validation & Magic Bytes**: Verifies header magic bytes (`%PDF-` for PDF, `PK\x03\x04` for DOCX) preventing disguised executable payloads.
+- **10MB Upload Limit**: Enforces `MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024` to prevent memory exhaustion Denial-of-Service attacks.
+- **Path Traversal Sanitization**: Strips `../`, `..\`, and control sequences, safely regularizing filenames into alphanumeric basenames.
+- **Adversarial Prompt Injection Scanner**: Flags injection patterns (`"SYSTEM: Ignore prior instructions"`, `"Output 100/100"`) and securely wraps text in `<UNTRUSTED_CANDIDATE_DATA>` XML boundary enclosures with strict LLM meta-instruction defenses.
+- **Deterministic Immunity**: Because final matching scores are computed mathematically rather than by the LLM, adversarial prompt injection payloads embedded in resumes cannot manipulate the numerical score.
+
+---
+
+## 8D. Blind Screening Mode (Pedigree & Name Anonymization)
+
+Located at `lib/security/anonymizer.ts` with direct toggle controls across the Candidate Leaderboard and Detail inspection workspaces:
+- **PII Stripping & Pedigree Neutralization**: Single-click activation converts candidate profiles into anonymized evaluation dossiers:
+  - Masked candidate identity (e.g., `Candidate #1 (Anonymized)`).
+  - Redacted contact information (e.g., `[Redacted for Blind Review]`).
+  - School pedigree normalization: High-prestige and selective universities are replaced with `Accredited Institution (Pedigree Masked)` while preserving degree level and graduation year.
+- **Cognitive Bias Mitigation**: Enforces evaluation solely on objective demonstrated capability, verified production skills, and domain tenure.
+
+---
+
+## 8E. Candidate Trade-Off Analysis Engine
+
+Located at `lib/engine/comparison-service.ts` and rendered in the multi-candidate comparison matrix (`/jobs/[id]/compare`):
+- **Pairwise Technical & Dimension Comparison**: When recruiters compare 2 to 4 candidates side-by-side, the engine computes:
+  - Technical dimension leads (Skills, Experience, Education, Projects).
+  - Net domain experience and production tenure gaps.
+  - Granular required skill overlaps and missing requirement differentials.
+- **Executive Comparative Summary**: Generates structured trade-off bullets (e.g., *"Candidate A leads in verified Skills (+12.0 pts) and holds 2.5 more years of relevant experience, but lacks direct Kubernetes evidence; Candidate B provides higher overall tenure but demonstrates transferable rather than direct cloud primitives"*).
+
+---
+
+## 8F. Hiring Committee Evidence Pack Export Service
+
+Located at `lib/engine/export-service.ts` and accessible via the top action bar or `/api/jobs/[id]/candidates/[candidateId]/export`:
+- **Audit-Ready Markdown Dossiers**: Generates comprehensive, hiring-committee-ready `.md` evidence packs containing:
+  - Executive summary and configurable match score breakdown.
+  - Score deficit audit ("Why Not 100?") with point-by-point deductions.
+  - Requirement-by-requirement evidence log with verified citations and snippet quotations.
+  - Anomaly & consistency risk assessment.
+  - Tailored interview questions targeting identified skill gaps.
+  - Audit trail of recruiter decisions and feedback.
+- **Multi-Candidate Comparison Briefs**: Generates structured cross-candidate comparison documents for final selection rounds.
+
+---
+
+## 8G. GDPR Compliance & Right-to-be-Forgotten
+
+Located at `lib/storage/store.ts` and `/api/jobs/[id]/candidates/[candidateId]`:
+- **Permanent Data Purge**: Full candidate profiles, extracted resumes, parsed entities, and matching records can be permanently deleted upon candidate request.
+- **Zero-PII Compliance Auditing**: The deletion action logs a permanent, cryptographically identifiable `candidate_deleted` audit event recording timestamp, authorizing recruiter, and reason without retaining candidate PII.
+
+---
+
+## 8H. Enterprise Pipeline Stages & Model Calibration Feedback
+
+Located in `lib/types.ts` and candidate review cards:
+- **5-Stage Pipeline Tracking**: Candidates transition between structured pipeline stages (`screening` $\to$ `technical_review` $\to$ `interview` $\to$ `offer` $\to$ `archived`).
+- **Recruiter Calibration Feedback Loop**: Recruiters can record model calibration feedback (`score_overestimated`, `score_underestimated`, `missing_critical_skill`, `domain_experience_undervalued`, etc.) with customized star ratings and observations, powering continuous scoring calibration without modifying deterministic scoring rules.
+
+---
+
 ## 9. AI Evaluation & Benchmark Suite (Proving Semantic Beats Keywords)
 
 Access the live dashboard at **`/evaluation`** or run via CLI:
@@ -217,14 +304,14 @@ Accessible under the **“Judge Demo Cases”** tab in `/evaluation` and directl
 
 ---
 
-## 11. Automated Edge Cases & Reliability Suite (12 Tests)
+## 11. Automated Reliability & Security Suite (15 Tests)
 
 Run via UI (`/test-suite`) or CLI:
 ```bash
 npm run test:edge-cases
 ```
 
-All 12 edge cases execute and pass cleanly:
+All 15 production reliability & security test cases execute and pass cleanly:
 1. **Perfect Candidate**: All 5 required skills, CS degree, 6+ yrs tenure $\to$ Score $\ge 85$, 0 missing.
 2. **Poor Candidate**: Unrelated retail background $\to$ Score $18/100$, Low Alignment recommendation.
 3. **Missing Required Skill**: Strong UI dev lacking Node.js & PostgreSQL $\to$ Score capped at $20/100$, flags missing.
@@ -237,6 +324,9 @@ All 12 edge cases execute and pass cleanly:
 10. **Duplicate Resume Detection**: Uploading same document twice $\to$ Caught via cryptographic SHA-256 hash.
 11. **Empty Document**: 0-byte file $\to$ Throws explicit actionable validation error.
 12. **Invalid File Format**: Unsupported extension (`.exe`) $\to$ Rejected with list of accepted formats (PDF, DOCX, TXT).
+13. **Adversarial Prompt Injection Defense**: Resumes embedding directives (`"SYSTEM: Ignore prior instructions..."`) $\to$ Scanned by security input guard, isolated inside XML safety boundaries, and nullified by deterministic mathematical scoring.
+14. **Oversized File Upload Defense**: Payloads exceeding 10MB limit $\to$ Explicitly rejected prior to memory parsing to prevent Denial-of-Service exhaustion.
+15. **Path Traversal & Filename Sanitization**: Filenames with directory traversal characters (`../../etc/passwd%00resume.txt`) $\to$ Sanitized to safe basenames, blocking arbitrary file overwrite vulnerabilities.
 
 ---
 
@@ -313,10 +403,15 @@ npm start
 | `/api/benchmark` | `GET`, `POST` | Executes the 8 AI evaluation benchmarks comparing Keyword vs MatchLens. |
 | `/api/judge-demo` | `GET`, `POST` | Executes the 6 Judge Demonstration Cases (Cases A–F) with real pipeline execution. |
 | `/api/jobs` | `GET`, `POST` | Lists requisitions or creates new job openings with extracted requirements. |
+| `/api/jobs/[id]` | `GET`, `PATCH`, `DELETE` | Retrieves, updates, or deletes a job requisition and its requirements. |
 | `/api/jobs/[id]/candidates` | `GET` | Fetches candidates ranked by deterministic match score with evidence logs. |
+| `/api/jobs/[id]/candidates/[candidateId]` | `GET`, `PATCH`, `DELETE` | Fetches profile, updates decision/stage/feedback, or permanently purges candidate under GDPR. |
+| `/api/jobs/[id]/candidates/[candidateId]/export` | `GET`, `POST` | Generates and exports audit-ready Markdown Evidence Pack dossiers. |
 | `/api/jobs/[id]/upload` | `POST` | Uploads and parses PDF/DOCX/TXT resumes through the full dynamic semantic pipeline. |
 | `/api/jobs/[id]/rescore` | `POST` | Re-evaluates candidate scores dynamically upon recruiter weight adjustments. |
-| `/api/edge-cases/run` | `GET`, `POST` | Executes the 12 Edge Cases & Reliability test suite. |
+| `/api/edge-cases/run` | `GET`, `POST` | Executes the 15 Edge Cases & Reliability test suite. |
+| `/api/audit-log` | `GET` | Queries immutable compliance audit events with actor and transition history. |
+| `/api/settings` | `GET` | Returns matching engine specs, model provider status, and security standards. |
 
 ---
 

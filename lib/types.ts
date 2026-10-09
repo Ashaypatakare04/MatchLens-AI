@@ -197,7 +197,38 @@ export interface EvidenceItem {
   nature: "Extracted fact" | "Computed metric" | "AI interpretation" | "Warning requiring verification";
 }
 
-export type RecruiterDecision = "shortlisted" | "rejected" | "maybe" | "unreviewed";
+export type RecruiterDecision =
+  | "shortlisted"
+  | "maybe"
+  | "rejected"
+  | "unreviewed"
+  | "request_interview"
+  | "request_code_sample"
+  | "needs_verification";
+
+export type PipelineStage =
+  | "screening"
+  | "technical_review"
+  | "interview"
+  | "offer"
+  | "archived";
+
+export type RecruiterFeedbackReason =
+  | "required_skill_too_strict"
+  | "equivalent_experience"
+  | "weight_mismatch"
+  | "project_undervalued"
+  | "culture_fit_concern"
+  | "other";
+
+export interface RecruiterFeedback {
+  overrideType: "promoted_above_score" | "demoted_below_score" | "neutral_calibration";
+  reason: RecruiterFeedbackReason;
+  comment?: string;
+  timestamp: string;
+  recruiterId: string;
+}
+
 export type AIRecommendation = "Strong Match" | "Consider" | "Review Required" | "Low Alignment";
 
 export interface MatchAnalysis {
@@ -235,6 +266,8 @@ export interface MatchAnalysis {
   aiExplanation: string;
   recruiterDecision: RecruiterDecision;
   recruiterNotes: string;
+  pipelineStage?: PipelineStage;
+  recruiterFeedback?: RecruiterFeedback;
   decisionTimestamp?: string;
   analyzedAt: string;
 }
@@ -283,7 +316,10 @@ export interface EdgeCaseTestCase {
     | "unsupported_claim"
     | "duplicate_resume"
     | "empty_document"
-    | "invalid_file";
+    | "invalid_file"
+    | "prompt_injection"
+    | "oversized_file"
+    | "path_traversal";
   result?: {
     passed: boolean;
     detectedFlags: string[];

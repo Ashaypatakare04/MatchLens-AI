@@ -15,7 +15,7 @@ export async function POST(
       return NextResponse.json({ error: "Scoring weights are required." }, { status: 400 });
     }
 
-    const updatedMatches = Store.rescoreJob(jobId, weights);
+    const updatedMatches = await Store.rescoreJob(jobId, weights);
     return NextResponse.json({ matches: updatedMatches, count: updatedMatches.length });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

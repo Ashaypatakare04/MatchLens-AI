@@ -4,7 +4,7 @@ import { DEMO_JOB } from "../lib/demo-data";
 async function main() {
   console.log("================================================================================");
   console.log("             MATCHLENS AI - EDGE CASE & RELIABILITY TEST SUITE                  ");
-  console.log("                    ALGOTHON’26 — ALG-AI-01 Benchmark                           ");
+  console.log("             Production Security & Reliability Verification Suite               ");
   console.log("================================================================================\n");
 
   const startTime = Date.now();

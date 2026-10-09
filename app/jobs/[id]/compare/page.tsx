@@ -7,19 +7,15 @@ import {
   ArrowLeft,
   Scale,
   CheckCircle2,
-  AlertTriangle,
-  Briefcase,
-  GraduationCap,
   Sparkles,
-  Layers,
   ArrowRight,
-  ShieldCheck,
-  Check,
-  X,
+  FileDown,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { ScoreBadge } from "@/components/ScoreBadge";
-import { CandidateProfile, MatchAnalysis, Job, CandidateWithMatch } from "@/lib/types";
+import { Job, CandidateWithMatch } from "@/lib/types";
+import { computeCandidateTradeoffs } from "@/lib/engine/comparison-service";
+import { generateComparisonBriefMarkdown } from "@/lib/engine/export-service";
 
 export default function CandidateComparisonPage({
   params,
@@ -36,13 +32,13 @@ export default function CandidateComparisonPage({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchComparisonData = async () => {
-      setLoading(true);
+    let isMounted = true;
+    async function loadData() {
       try {
         const jobRes = await fetch(`/api/jobs/${jobId}`);
         if (jobRes.ok) {
           const jobJson = await jobRes.json();
-          setJob(jobJson.job);
+          if (isMounted) setJob(jobJson.job);
         }
 
         const candRes = await fetch(`/api/jobs/${jobId}/candidates`);
@@ -55,17 +51,32 @@ export default function CandidateComparisonPage({
             : all.slice(0, 3).map((c) => c.candidate.id); // default to top 3 if none specified
 
           const selected = all.filter((item) => targetIds.includes(item.candidate.id));
-          setCandidates(selected);
+          if (isMounted) setCandidates(selected);
         }
       } catch (err) {
         console.error("Failed to load candidate comparison:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
-    };
+    }
 
-    fetchComparisonData();
+    loadData();
+    return () => {
+      isMounted = false;
+    };
   }, [jobId, idsQuery]);
+
+  const handleExportBrief = () => {
+    if (!job || candidates.length === 0) return;
+    const md = generateComparisonBriefMarkdown(candidates, job);
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `comparison-brief-${job.id}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
     return (
@@ -105,6 +116,7 @@ export default function CandidateComparisonPage({
   const topCandidate = candidates[0];
   const secondCandidate = candidates[1];
   const differenceSummary = `According to the configured job weights (${job?.weights.skills}% Skills, ${job?.weights.experience}% Experience, ${job?.weights.responsibilities}% Responsibilities): ${topCandidate.candidate.name} (${topCandidate.match.overallScore}/100) ranks higher primarily because they satisfy ${topCandidate.match.skillsAnalysis.requiredMatched.length}/${job?.requirements.requiredSkills.length} required technical skills and demonstrate ${topCandidate.match.relevantExperienceYears ?? topCandidate.candidate.totalExperienceYears} years of verified relevant engineering experience (out of ${topCandidate.candidate.totalExperienceYears} total cumulative years), compared to ${secondCandidate.candidate.name} (${secondCandidate.match.overallScore}/100) who has ${secondCandidate.match.skillsAnalysis.requiredMissing.length > 0 ? `missing required skills (${secondCandidate.match.skillsAnalysis.requiredMissing.join(", ")})` : `${secondCandidate.match.relevantExperienceYears ?? secondCandidate.candidate.totalExperienceYears} relevant years tenure`}${secondCandidate.match.potentialInconsistencies.length > 0 ? " and flagged inconsistencies" : ""}.`;
+  const tradeoffs = job ? computeCandidateTradeoffs(candidates, job) : [];
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100">
@@ -121,19 +133,91 @@ export default function CandidateComparisonPage({
             <span>Back to Candidate Dashboard</span>
           </Link>
 
-          <span className="text-xs text-slate-500 font-mono">
-            Comparing {candidates.length} candidates side-by-side
-          </span>
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={handleExportBrief}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-semibold text-xs border border-slate-300 dark:border-slate-700 shadow-sm transition"
+            >
+              <FileDown className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Export Comparison Brief (.md)</span>
+            </button>
+            <span className="text-xs text-slate-500 font-mono">
+              Comparing {candidates.length} candidates side-by-side
+            </span>
+          </div>
         </div>
 
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Candidate Side-by-Side Comparison
+            Candidate Side-by-Side Comparison &amp; Trade-Off Matrix
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Evaluates candidates against identical criteria: Required skills, Experience tenure, Projects, Inconsistencies, and Evidence quality.
           </p>
         </div>
+
+        {/* Head-to-Head Candidate Trade-Off Analysis */}
+        {tradeoffs.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Scale className="w-5 h-5 text-indigo-600" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-white">
+                  Head-to-Head Candidate Trade-Off Analysis
+                </h3>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {tradeoffs.map((t, idx) => (
+                <div
+                  key={idx}
+                  className="rounded-lg border border-slate-200 dark:border-slate-800 p-4 bg-slate-50/50 dark:bg-slate-950/40 space-y-2.5 text-xs"
+                >
+                  <div className="flex items-center justify-between font-bold text-slate-900 dark:text-white">
+                    <span>{t.candidateA.name} ({t.candidateA.score}) vs {t.candidateB.name} ({t.candidateB.score})</span>
+                    <span className="font-mono text-[11px] text-indigo-600">
+                      Δ {Math.abs(t.scoreDifference)} pts
+                    </span>
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-400 text-[11px] leading-relaxed italic">
+                    {t.tradeoffSummary}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800 text-[11px]">
+                    <div>
+                      <span className="font-semibold text-emerald-700 dark:text-emerald-400 block mb-1">
+                        {t.candidateA.name} Advantages:
+                      </span>
+                      {t.advantagesA.length > 0 ? (
+                        <ul className="list-disc pl-3 space-y-0.5 text-slate-700 dark:text-slate-300">
+                          {t.advantagesA.map((adv, i) => (
+                            <li key={i}>{adv}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-slate-400">Baseline criteria</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-semibold text-indigo-700 dark:text-indigo-400 block mb-1">
+                        {t.candidateB.name} Advantages:
+                      </span>
+                      {t.advantagesB.length > 0 ? (
+                        <ul className="list-disc pl-3 space-y-0.5 text-slate-700 dark:text-slate-300">
+                          {t.advantagesB.map((adv, i) => (
+                            <li key={i}>{adv}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span className="text-slate-400">Baseline criteria</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Objective Ranking Rationale Alert */}
         <div className="bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 rounded-xl p-5 shadow-sm space-y-2 text-xs">
@@ -307,9 +391,9 @@ export default function CandidateComparisonPage({
               {/* ALG-AI-01 Bonus: Inconsistencies */}
               <tr className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
                 <td className="p-4 font-bold text-slate-700 dark:text-slate-300 bg-slate-50/40 dark:bg-slate-950/40">
-                  ALG-AI-01 Bonus Flags
+                  Integrity Verification &amp; Flags
                   <span className="block text-[10px] font-normal text-amber-600 mt-0.5">
-                    Inconsistency checks
+                    Profile consistency checks
                   </span>
                 </td>
                 {candidates.map(({ match }) => (

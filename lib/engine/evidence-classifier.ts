@@ -55,10 +55,10 @@ export function classifySkillEvidence(
 
   // Track occurrences across sections
   let foundInSkillsList = false;
-  let foundInWorkHistory: WorkExperienceItem[] = [];
-  let foundInProjects: ProjectItem[] = [];
-  let foundInAchievements: string[] = [];
-  let foundInCerts: string[] = [];
+  const foundInWorkHistory: WorkExperienceItem[] = [];
+  const foundInProjects: ProjectItem[] = [];
+  const foundInAchievements: string[] = [];
+  const foundInCerts: string[] = [];
 
   let bestWorkSnippet = "";
   let bestWorkItem: WorkExperienceItem | null = null;
@@ -120,12 +120,22 @@ export function classifySkillEvidence(
     }
   }
 
+  // 5. Check Certifications
+  if (candidate.certifications) {
+    for (const cert of candidate.certifications) {
+      if (boundaryRegex.test(cert.name)) {
+        foundInCerts.push(cert.name);
+      }
+    }
+  }
+
   // Count independent sections supporting this skill
   const independentSections: string[] = [];
   if (foundInSkillsList) independentSections.push("Skills List");
   if (foundInWorkHistory.length > 0) independentSections.push("Work Experience");
   if (foundInProjects.length > 0) independentSections.push("Projects");
   if (foundInAchievements.length > 0) independentSections.push("Key Achievements");
+  if (foundInCerts.length > 0) independentSections.push("Certifications");
 
   const multipleSectionsCount = independentSections.length;
 

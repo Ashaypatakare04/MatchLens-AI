@@ -12,7 +12,7 @@
  * Each case runs real extraction, semantic matching, and consistency checks.
  */
 
-import { Job, CandidateProfile, MatchAnalysis } from "../types";
+import { Job, MatchAnalysis } from "../types";
 import { DEMO_JOB } from "../demo-data";
 import { extractCandidateProfileFromText } from "../extractor/resume-extractor";
 import { analyzeCandidate } from "./analyzer";

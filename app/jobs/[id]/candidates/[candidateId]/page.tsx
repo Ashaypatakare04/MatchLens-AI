@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -22,17 +22,33 @@ import {
   ChevronUp,
   Cpu,
   Scale,
+  MinusCircle,
+  History,
+  FileDown,
+  Trash2,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { InconsistencyCard } from "@/components/InconsistencyCard";
-import { CandidateProfile, MatchAnalysis, Job, RecruiterDecision } from "@/lib/types";
+import {
+  CandidateProfile,
+  MatchAnalysis,
+  Job,
+  RecruiterDecision,
+  PipelineStage,
+  RecruiterFeedbackReason,
+  RecruiterFeedback,
+} from "@/lib/types";
+import { computeScoreDeficit } from "@/lib/engine/deficit-calculator";
+import { generateCandidateEvidencePackMarkdown } from "@/lib/engine/export-service";
+import { anonymizeCandidateProfile } from "@/lib/security/anonymizer";
 
 export default function CandidateDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const jobId = params.id as string;
   const candidateId = params.candidateId as string;
+  const router = useRouter();
 
   const [candidate, setCandidate] = useState<CandidateProfile | null>(null);
   const [match, setMatch] = useState<MatchAnalysis | null>(null);
@@ -41,44 +57,78 @@ export default function CandidateDetailPage() {
 
   // Recruiter actions state
   const [decision, setDecision] = useState<RecruiterDecision>("unreviewed");
+  const [pipelineStage, setPipelineStage] = useState<PipelineStage>("screening");
   const [notes, setNotes] = useState("");
   const [isSavingDecision, setIsSavingDecision] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  // Bias reduction and GDPR delete
+  const [anonymizedMode, setAnonymizedMode] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Model calibration & override feedback
+  const [feedbackReason, setFeedbackReason] = useState<RecruiterFeedbackReason>("other");
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+
   // Expandable formula toggle (open by default for judges/recruiters)
   const [showFormula, setShowFormula] = useState(true);
 
+  const displayCandidate = useMemo(() => {
+    if (!candidate) return null;
+    return anonymizedMode ? anonymizeCandidateProfile(candidate, 1) : candidate;
+  }, [candidate, anonymizedMode]);
+
   useEffect(() => {
-    const fetchCandidateData = async () => {
-      setLoading(true);
+    let isMounted = true;
+    async function loadData() {
       try {
         const res = await fetch(`/api/jobs/${jobId}/candidates/${candidateId}`);
         if (res.ok) {
           const json = await res.json();
-          setCandidate(json.candidate);
-          setMatch(json.match);
-          setJob(json.job);
-          setDecision(json.match.recruiterDecision || "unreviewed");
-          setNotes(json.match.recruiterNotes || "");
+          if (isMounted) {
+            setCandidate(json.candidate);
+            setMatch(json.match);
+            setJob(json.job);
+            setDecision(json.match.recruiterDecision || "unreviewed");
+            setNotes(json.match.recruiterNotes || "");
+            setPipelineStage(json.match.pipelineStage || "screening");
+            if (json.match.recruiterFeedback) {
+              setFeedbackReason(json.match.recruiterFeedback.reason || "other");
+              setFeedbackComment(json.match.recruiterFeedback.comment || "");
+            }
+          }
         }
       } catch (err) {
         console.error("Failed to fetch candidate details:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
     };
-
-    fetchCandidateData();
   }, [jobId, candidateId]);
 
-  const handleSaveDecision = async (newDecision: RecruiterDecision) => {
+  const handleSaveDecision = async (
+    newDecision: RecruiterDecision,
+    newStage?: PipelineStage,
+    customFeedback?: RecruiterFeedback
+  ) => {
     setDecision(newDecision);
+    if (newStage) setPipelineStage(newStage);
     setIsSavingDecision(true);
     try {
       const res = await fetch(`/api/jobs/${jobId}/candidates/${candidateId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision: newDecision, notes }),
+        body: JSON.stringify({
+          decision: newDecision,
+          notes,
+          pipelineStage: newStage || pipelineStage,
+          feedback: customFeedback,
+        }),
       });
       if (res.ok) {
         setSavedSuccess(true);
@@ -97,7 +147,11 @@ export default function CandidateDetailPage() {
       const res = await fetch(`/api/jobs/${jobId}/candidates/${candidateId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision, notes }),
+        body: JSON.stringify({
+          decision,
+          notes,
+          pipelineStage,
+        }),
       });
       if (res.ok) {
         setSavedSuccess(true);
@@ -127,6 +181,43 @@ export default function CandidateDetailPage() {
     a.download = `MatchLens_Analysis_${candidate.name.replace(/\s+/g, "_")}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadEvidencePack = () => {
+    if (!candidate || !match || !job) return;
+    const md = generateCandidateEvidencePackMarkdown(candidate, match, job);
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `evidence-pack-${candidate.name.replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleDeleteCandidate = async () => {
+    if (
+      !confirm(
+        "Are you sure you want to permanently delete this candidate's profile and match records per GDPR / Right-to-Delete compliance? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/candidates/${candidateId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        alert("Candidate profile purged successfully.");
+        router.push(`/jobs/${jobId}/candidates`);
+      }
+    } catch (err) {
+      console.error("Failed to delete candidate:", err);
+      alert("Failed to purge candidate record.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   if (loading) {
@@ -159,14 +250,15 @@ export default function CandidateDetailPage() {
 
   const hasInconsistencies = match.potentialInconsistencies.length > 0;
   const weights = job?.weights || { skills: 35, experience: 25, responsibilities: 15, projects: 15, education: 10 };
+  const deficitReport = job ? computeScoreDeficit(match, job) : null;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col text-slate-900 dark:text-slate-100">
       <Navbar />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Navigation Breadcrumb */}
-        <div className="flex items-center justify-between">
+        {/* Navigation Breadcrumb & Top Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <Link
             href={`/jobs/${jobId}/candidates`}
             className="inline-flex items-center space-x-1.5 text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-semibold"
@@ -175,13 +267,40 @@ export default function CandidateDetailPage() {
             <span>Back to Candidate Dashboard</span>
           </Link>
 
-          <button
-            onClick={handleDownloadAnalysis}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Download Analysis (JSON)</span>
-          </button>
+          <div className="flex items-center space-x-2 flex-wrap">
+            {/* Anonymized Mode Toggle */}
+            <button
+              onClick={() => setAnonymizedMode((prev) => !prev)}
+              className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                anonymizedMode
+                  ? "bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 border-purple-300 dark:border-purple-800 shadow-sm"
+                  : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-50"
+              }`}
+              title="Toggle Blind Screening Mode to reduce pedigree and demographic bias"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-600" />
+              <span>{anonymizedMode ? "Anonymized Mode: ON" : "Blind Screening Mode"}</span>
+            </button>
+
+            {/* Export Evidence Pack */}
+            <button
+              onClick={handleDownloadEvidencePack}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shadow-sm transition"
+              title="Download structured Hiring Committee Evidence Pack in Markdown"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span>Export Evidence Pack (.md)</span>
+            </button>
+
+            {/* Download JSON */}
+            <button
+              onClick={handleDownloadAnalysis}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-400" />
+              <span>Raw JSON</span>
+            </button>
+          </div>
         </div>
 
         {/* 1. Candidate Identity & 2. Overall Match Score & 3. Recommendation */}
@@ -190,7 +309,7 @@ export default function CandidateDetailPage() {
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-                  {candidate.name}
+                  {displayCandidate?.name}
                 </h1>
                 <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 uppercase tracking-wider font-mono">
                   {candidate.fileType.toUpperCase()}
@@ -203,15 +322,15 @@ export default function CandidateDetailPage() {
               <div className="flex flex-wrap items-center gap-4 text-xs text-slate-600 dark:text-slate-300">
                 <span className="flex items-center space-x-1.5">
                   <Mail className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{candidate.email}</span>
+                  <span>{displayCandidate?.email}</span>
                 </span>
                 <span className="flex items-center space-x-1.5">
                   <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{candidate.phone}</span>
+                  <span>{displayCandidate?.phone}</span>
                 </span>
                 <span className="flex items-center space-x-1.5">
                   <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{candidate.location}</span>
+                  <span>{displayCandidate?.location}</span>
                 </span>
                 <span className="flex items-center space-x-1.5">
                   <Briefcase className="w-3.5 h-3.5 text-slate-400" />
@@ -374,6 +493,90 @@ export default function CandidateDetailPage() {
             </div>
           )}
         </div>
+
+        {/* 6A. Score Deficit Analysis ("Why Didn't This Candidate Score Higher?") */}
+        {deficitReport && (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <MinusCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  Score Deficit Analysis: Why Didn&apos;t This Candidate Score Higher?
+                </h2>
+              </div>
+              <span className="text-xs font-mono font-semibold text-slate-500">
+                Total Deficit: <strong className="text-rose-600 dark:text-rose-400">-{deficitReport.totalPointsLost} pts</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500">Direct Coverage</span>
+                <div className="text-base font-bold text-emerald-600 font-mono mt-0.5">
+                  {deficitReport.coverage.directRequiredCount} / {deficitReport.coverage.totalRequiredCount}
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500">Transferable Matches</span>
+                <div className="text-base font-bold text-blue-600 font-mono mt-0.5">
+                  {deficitReport.coverage.transferableRequiredCount}
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500">Missing Direct Evidence</span>
+                <div className="text-base font-bold text-rose-600 font-mono mt-0.5">
+                  {deficitReport.coverage.missingRequiredCount}
+                </div>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                <span className="text-slate-500">Verification Flags</span>
+                <div className="text-base font-bold text-amber-600 font-mono mt-0.5">
+                  {match.potentialInconsistencies.length}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                Itemized Point Deductions (-{deficitReport.totalPointsLost} pts)
+              </h3>
+              {deficitReport.pointsLost.length === 0 ? (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 text-xs text-emerald-800 dark:text-emerald-300">
+                  ✓ Candidate received maximum evaluation credit across all requirement dimensions.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {deficitReport.pointsLost.map((deficit, dIdx) => (
+                    <div
+                      key={dIdx}
+                      className="p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-xs flex flex-col sm:flex-row sm:items-start justify-between gap-3"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center space-x-2">
+                          <span className="font-bold text-slate-900 dark:text-white">
+                            {deficit.requirement}
+                          </span>
+                          <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500">
+                            {deficit.category.replace("_", " ")}
+                          </span>
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-400">
+                          {deficit.reason}
+                        </p>
+                        <p className="text-[11px] text-indigo-700 dark:text-indigo-400 font-medium">
+                          Recruiter Screen Tip: {deficit.actionableGuidance}
+                        </p>
+                      </div>
+                      <span className="font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/60 px-2.5 py-1 rounded border border-rose-200 dark:border-rose-900 flex-shrink-0 self-start">
+                        -{deficit.pointsLost} pts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 6B. Requirement-Level Evaluation Matrix (Section 5) */}
         {match.requirementMatches && match.requirementMatches.length > 0 && (
@@ -722,70 +925,209 @@ export default function CandidateDetailPage() {
           </div>
         </div>
 
-        {/* 13. Recruiter Decision & Notes (Human-in-the-Loop) */}
+        {/* 13. Recruiter Decision, Pipeline Stage & Human-in-the-Loop */}
         <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                13. Recruiter Decision &amp; Human-in-the-Loop
+                13. Recruiter Decision &amp; Pipeline Governance
               </h2>
               <p className="text-xs text-slate-500">
-                AI provides recommendations; the hiring decision remains 100% human-directed.
+                AI provides decision support; hiring workflows and state transitions remain 100% recruiter-governed.
               </p>
             </div>
 
+            {/* Pipeline Stage Dropdown */}
             <div className="flex items-center space-x-2">
+              <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Stage:</span>
+              <select
+                value={pipelineStage}
+                onChange={(e) => handleSaveDecision(decision, e.target.value as PipelineStage)}
+                className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-xs font-semibold text-slate-800 dark:text-slate-200"
+              >
+                <option value="screening">1. Initial Screening</option>
+                <option value="technical_review">2. Technical Review</option>
+                <option value="interview">3. Interview Loop</option>
+                <option value="offer">4. Offer Extended</option>
+                <option value="archived">5. Archived</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Decision Buttons Grid */}
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+              Recruiter Action:
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
               <button
                 onClick={() => handleSaveDecision("shortlisted")}
                 disabled={isSavingDecision}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 border ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 border ${
                   decision === "shortlisted"
                     ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                 }`}
               >
-                <CheckCircle2 className="w-4 h-4" />
+                <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Shortlist</span>
+              </button>
+
+              <button
+                onClick={() => handleSaveDecision("request_interview")}
+                disabled={isSavingDecision}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 border ${
+                  decision === "request_interview"
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                }`}
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                <span>Tech Screen</span>
+              </button>
+
+              <button
+                onClick={() => handleSaveDecision("request_code_sample")}
+                disabled={isSavingDecision}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 border ${
+                  decision === "request_code_sample"
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                }`}
+              >
+                <FolderGit2 className="w-3.5 h-3.5" />
+                <span>Code Sample</span>
               </button>
 
               <button
                 onClick={() => handleSaveDecision("maybe")}
                 disabled={isSavingDecision}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 border ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 border ${
                   decision === "maybe"
                     ? "bg-amber-600 text-white border-amber-600 shadow-sm"
-                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-amber-50"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-amber-50 dark:hover:bg-amber-950/40"
                 }`}
               >
-                <HelpCircle className="w-4 h-4" />
-                <span>Maybe</span>
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>Hold / Maybe</span>
+              </button>
+
+              <button
+                onClick={() => handleSaveDecision("needs_verification")}
+                disabled={isSavingDecision}
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 border ${
+                  decision === "needs_verification"
+                    ? "bg-orange-600 text-white border-orange-600 shadow-sm"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-orange-50 dark:hover:bg-orange-950/40"
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Verify Flags</span>
               </button>
 
               <button
                 onClick={() => handleSaveDecision("rejected")}
                 disabled={isSavingDecision}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 border ${
+                className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 border ${
                   decision === "rejected"
                     ? "bg-rose-600 text-white border-rose-600 shadow-sm"
-                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-rose-50"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                 }`}
               >
-                <AlertTriangle className="w-4 h-4" />
+                <AlertTriangle className="w-3.5 h-3.5" />
                 <span>Reject</span>
               </button>
-
-              {savedSuccess && (
-                <span className="text-xs text-emerald-600 font-semibold ml-2">
-                  ✓ Decision saved
-                </span>
-              )}
             </div>
+            {savedSuccess && (
+              <span className="text-xs text-emerald-600 font-semibold block pt-1">
+                ✓ Decision and stage updated
+              </span>
+            )}
           </div>
 
-          <div className="space-y-3">
+          {/* Model Calibration & Feedback Prompt */}
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              onClick={() => setShowFeedbackModal((prev) => !prev)}
+              className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold hover:underline inline-flex items-center space-x-1"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>
+                {showFeedbackModal ? "Hide Calibration Feedback" : "Calibrate Matching / Explain Override"}
+              </span>
+            </button>
+
+            {showFeedbackModal && (
+              <div className="mt-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3 text-xs">
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white">
+                    Recruiter Calibration Feedback Loop
+                  </h4>
+                  <p className="text-slate-500 text-[11px]">
+                    If your decision departs from the AI score, record the underlying reason to refine job weights and transferable rules.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                      Calibration Reason:
+                    </label>
+                    <select
+                      value={feedbackReason}
+                      onChange={(e) => setFeedbackReason(e.target.value as RecruiterFeedbackReason)}
+                      className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                    >
+                      <option value="required_skill_too_strict">Required skill criteria was too strict</option>
+                      <option value="equivalent_experience">Candidate possesses equivalent experience not fully credited</option>
+                      <option value="weight_mismatch">Configured scoring weights misaligned with role reality</option>
+                      <option value="project_undervalued">Project / practical proof was undervalued</option>
+                      <option value="culture_fit_concern">Concerns regarding collaboration or team alignment</option>
+                      <option value="other">Other recruiter discretion</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-slate-700 dark:text-slate-300 block mb-1">
+                      Rationale Comment:
+                    </label>
+                    <input
+                      type="text"
+                      value={feedbackComment}
+                      onChange={(e) => setFeedbackComment(e.target.value)}
+                      placeholder="e.g. Extensive Vue experience compensates for React requirement"
+                      className="w-full p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => {
+                      const feedbackObj: RecruiterFeedback = {
+                        overrideType: match.overallScore < 60 ? "promoted_above_score" : "neutral_calibration",
+                        reason: feedbackReason,
+                        comment: feedbackComment,
+                        timestamp: new Date().toISOString(),
+                        recruiterId: "recruiter-default",
+                      };
+                      handleSaveDecision(decision, pipelineStage, feedbackObj);
+                      setShowFeedbackModal(false);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition"
+                  >
+                    Save Calibration Record
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Recruiter Screening Notes */}
+          <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                Recruiter Screening Notes
+                Recruiter Private Notes
               </label>
               <button
                 onClick={handleSaveNotes}
@@ -797,13 +1139,67 @@ export default function CandidateDetailPage() {
               </button>
             </div>
             <textarea
-              rows={4}
+              rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Record your verification observations, technical screen questions, or compensation notes..."
               className="w-full p-3 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </div>
+        </div>
+
+        {/* 14. Auditable Decision Trail */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-3">
+          <div className="flex items-center space-x-2 font-bold text-slate-900 dark:text-white text-base">
+            <History className="w-5 h-5 text-indigo-600" />
+            <h2>14. Auditable Decision History &amp; Timeline</h2>
+          </div>
+          <p className="text-xs text-slate-500">
+            Immutable tracking of recruiter actions, status transitions, and review notes for compliance and calibration.
+          </p>
+          <div className="p-4 bg-slate-50 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800 text-xs space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[11px] text-slate-500 font-mono">
+              <span>Last Evaluated: {new Date(match.analyzedAt).toLocaleString()}</span>
+              <span>Pipeline Stage: <strong className="uppercase text-indigo-600">{pipelineStage}</strong></span>
+              <span>Current Status: <strong className="uppercase text-slate-900 dark:text-white">{decision}</strong></span>
+            </div>
+            {match.decisionTimestamp && (
+              <p className="text-slate-600 dark:text-slate-400 text-[11px]">
+                Recruiter status updated: {new Date(match.decisionTimestamp).toLocaleString()}
+              </p>
+            )}
+            {notes ? (
+              <div className="p-2.5 bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-800 text-[11px] text-slate-700 dark:text-slate-300">
+                <span className="font-semibold text-slate-900 dark:text-white">Active Screening Notes: </span>
+                <span>{notes}</span>
+              </div>
+            ) : (
+              <p className="text-slate-400 italic text-[11px]">
+                No private recruiter notes recorded yet.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* 15. Compliance & Right-to-Delete */}
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-rose-200 dark:border-rose-950/60 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-xs">
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-white">
+              Data Privacy &amp; GDPR Compliance (Right to Delete)
+            </h3>
+            <p className="text-slate-500 text-[11px] mt-0.5">
+              Permanently purges this candidate&apos;s parsed resume, extract vectors, and evaluation analysis from persistent storage.
+            </p>
+          </div>
+
+          <button
+            onClick={handleDeleteCandidate}
+            disabled={isDeleting}
+            className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-semibold border border-rose-200 dark:border-rose-800 transition flex-shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>{isDeleting ? "Purging Record..." : "Delete Candidate Record"}</span>
+          </button>
         </div>
       </main>
     </div>

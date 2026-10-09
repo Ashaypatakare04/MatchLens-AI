@@ -11,7 +11,6 @@ import {
   Clock,
   Sparkles,
   ArrowRight,
-  ShieldCheck,
   RefreshCw,
   Copy,
 } from "lucide-react";

@@ -5,7 +5,7 @@ import { Job } from "@/lib/types";
 
 export async function GET() {
   try {
-    const jobs = Store.getJobs();
+    const jobs = await Store.getJobs();
     return NextResponse.json({ jobs });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date().toISOString(),
     };
 
-    const saved = Store.createJob(newJob);
+    const saved = await Store.createJob(newJob);
     return NextResponse.json({ job: saved }, { status: 201 });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

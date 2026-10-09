@@ -3,6 +3,7 @@ import { Store } from "@/lib/storage/store";
 import { extractDocumentFromBuffer } from "@/lib/parsers/document-extractor";
 import { extractCandidateProfileFromText } from "@/lib/extractor/resume-extractor";
 import { analyzeCandidate } from "@/lib/engine/analyzer";
+import { sanitizeFilename } from "@/lib/security/input-guard";
 
 export async function POST(
   req: NextRequest,
@@ -10,7 +11,7 @@ export async function POST(
 ) {
   try {
     const { id: jobId } = await params;
-    const job = Store.getJob(jobId);
+    const job = await Store.getJob(jobId);
     if (!job) {
       return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
@@ -22,7 +23,7 @@ export async function POST(
       return NextResponse.json({ error: "No files uploaded." }, { status: 400 });
     }
 
-    const existingCandidates = Store.getCandidates(jobId);
+    const existingCandidates = await Store.getCandidates(jobId);
     const existingHashes = new Set(existingCandidates.map((c) => c.fileHash));
 
     const results: Array<{
@@ -36,7 +37,7 @@ export async function POST(
     }> = [];
 
     for (const file of files) {
-      const fileName = file.name;
+      const fileName = sanitizeFilename(file.name || "uploaded_resume.txt");
       try {
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
@@ -70,7 +71,7 @@ export async function POST(
         const match = analyzeCandidate(candidateProfile, job);
 
         // Persist to Store
-        Store.saveCandidateWithMatch(candidateProfile, match);
+        await Store.saveCandidateWithMatch(candidateProfile, match);
         existingHashes.add(docResult.fileHash);
 
         results.push({
