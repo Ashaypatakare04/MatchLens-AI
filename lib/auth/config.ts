@@ -18,7 +18,7 @@ export const authConfig: NextAuthConfig = {
   secret: process.env.AUTH_SECRET || "matchlens-dev-secret-key-32-chars-long-minimum-secure",
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 7 * 24 * 60 * 60, // 7 days (reduced from 30 for candidate PII protection)
   },
   pages: {
     signIn: "/login",
@@ -84,6 +84,17 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   callbacks: {
+    async redirect({ url, baseUrl }) {
+      // Prevents open redirects: allow relative URLs or same-origin URLs only
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const parsed = new URL(url);
+        if (parsed.origin === baseUrl) return url;
+      } catch {
+        return baseUrl;
+      }
+      return baseUrl;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;

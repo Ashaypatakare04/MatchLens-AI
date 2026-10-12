@@ -1,0 +1,28 @@
+name: MatchLens AI - Scheduled Retention Pruning
+
+on:
+  schedule:
+    # Run daily at 03:00 UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  prune-retention:
+    name: Execute Daily Document Retention Sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Retention API
+        env:
+          APP_BASE_URL: ${{ secrets.NEXTAUTH_URL || 'https://matchlens-ai.vercel.app' }}
+          MONITORING_API_KEY: ${{ secrets.MONITORING_API_KEY }}
+        run: |
+          if [ -z "$MONITORING_API_KEY" ]; then
+            echo "::warning ::MONITORING_API_KEY secret is not configured. Skipping retention API invocation."
+            exit 0
+          fi
+          echo "Triggering retention prune on $APP_BASE_URL/api/admin/retention..."
+          curl -sSf -X POST \
+            -H "Authorization: Bearer $MONITORING_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"limit": 200}' \
+            "$APP_BASE_URL/api/admin/retention"

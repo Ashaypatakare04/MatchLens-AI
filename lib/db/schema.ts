@@ -34,7 +34,10 @@ import type {
   RecruiterDecision,
   PipelineStage,
   AIRecommendation,
+  PilotFeedbackCategory,
+  PilotDisagreementReason,
 } from "../types";
+import type { QueueJobPayload } from "../queue/types";
 
 export const organizations = pgTable(
   "organizations",
@@ -238,9 +241,157 @@ export const auditEvents = pgTable(
   ]
 );
 
+export const resumeDocuments = pgTable(
+  "resume_documents",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    candidateId: text("candidate_id")
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").notNull(),
+    storageProvider: text("storage_provider").notNull().default("local"),
+    fileName: text("file_name").notNull(),
+    fileType: text("file_type").notNull().default("pdf"),
+    mimeType: text("mime_type").notNull().default("application/pdf"),
+    fileSize: integer("file_size").notNull().default(0),
+    fileHash: text("file_hash").notNull(),
+    status: text("status").notNull().default("active"),
+    retentionExpiresAt: timestamp("retention_expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("resume_docs_org_idx").on(table.organizationId),
+    index("resume_docs_job_idx").on(table.jobId),
+    index("resume_docs_candidate_idx").on(table.candidateId),
+    index("resume_docs_org_hash_idx").on(table.organizationId, table.fileHash),
+    index("resume_docs_status_idx").on(table.status),
+    index("resume_docs_retention_idx").on(table.retentionExpiresAt),
+  ]
+);
+
+export const processingJobs = pgTable(
+  "processing_jobs",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    documentId: text("document_id")
+      .notNull()
+      .references(() => resumeDocuments.id, { onDelete: "cascade" }),
+    candidateId: text("candidate_id")
+      .references(() => candidates.id, { onDelete: "set null" }),
+    fileName: text("file_name").notNull(),
+    fileSize: integer("file_size").notNull().default(0),
+    fileHash: text("file_hash").notNull(),
+    status: text("status").notNull().default("QUEUED"),
+    currentStage: text("current_stage").notNull().default("queued"),
+    progress: integer("progress").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("pjobs_org_idx").on(table.organizationId),
+    index("pjobs_job_idx").on(table.jobId),
+    index("pjobs_doc_idx").on(table.documentId),
+    index("pjobs_status_idx").on(table.status),
+    index("pjobs_org_status_idx").on(table.organizationId, table.status),
+    index("pjobs_heartbeat_idx").on(table.heartbeatAt),
+  ]
+);
+
+export const processingOutbox = pgTable(
+  "processing_outbox",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    processingJobId: text("processing_job_id")
+      .notNull()
+      .references(() => processingJobs.id, { onDelete: "cascade" }),
+    eventType: text("event_type").notNull().default("resume.process"),
+    payload: jsonb("payload").$type<QueueJobPayload>().notNull(),
+    status: text("status").notNull().default("PENDING"),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("poutbox_org_idx").on(table.organizationId),
+    index("poutbox_status_idx").on(table.status),
+    index("poutbox_job_idx").on(table.processingJobId),
+  ]
+);
+
+export const pilotFeedback = pgTable(
+  "pilot_feedback",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    jobId: text("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    candidateId: text("candidate_id")
+      .references(() => candidates.id, { onDelete: "cascade" }),
+    analysisId: text("analysis_id")
+      .references(() => analyses.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    category: text("category").$type<PilotFeedbackCategory>().notNull(),
+    disagreementReason: text("disagreement_reason").$type<PilotDisagreementReason>(),
+    systemRank: integer("system_rank"),
+    systemScore: doublePrecision("system_score"),
+    recruiterDecision: text("recruiter_decision").$type<RecruiterDecision>(),
+    comment: text("comment"),
+    perceivedTrustScore: integer("perceived_trust_score"),
+    perceivedUsefulnessScore: integer("perceived_usefulness_score"),
+    timeSavedMinutes: doublePrecision("time_saved_minutes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("pfeedback_org_idx").on(table.organizationId),
+    index("pfeedback_job_idx").on(table.jobId),
+    index("pfeedback_org_job_idx").on(table.organizationId, table.jobId),
+    index("pfeedback_candidate_idx").on(table.candidateId),
+    index("pfeedback_category_idx").on(table.category),
+    index("pfeedback_created_at_idx").on(table.createdAt),
+  ]
+);
+
 export type Organization = typeof organizations.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type JobRecord = typeof jobs.$inferSelect;
 export type CandidateRecord = typeof candidates.$inferSelect;
 export type AnalysisRecord = typeof analyses.$inferSelect;
 export type AuditEventRecord = typeof auditEvents.$inferSelect;
+export type ResumeDocumentRecord = typeof resumeDocuments.$inferSelect;
+export type ProcessingJobRecord = typeof processingJobs.$inferSelect;
+export type ProcessingOutboxRecord = typeof processingOutbox.$inferSelect;
+export type PilotFeedbackRecord = typeof pilotFeedback.$inferSelect;
+
+

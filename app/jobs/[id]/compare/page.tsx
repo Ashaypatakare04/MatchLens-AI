@@ -51,7 +51,19 @@ export default function CandidateComparisonPage({
             : all.slice(0, 3).map((c) => c.candidate.id); // default to top 3 if none specified
 
           const selected = all.filter((item) => targetIds.includes(item.candidate.id));
-          if (isMounted) setCandidates(selected);
+          if (isMounted) {
+            setCandidates(selected);
+
+            // Log non-PII comparison telemetry for pilot metrics
+            fetch(`/api/jobs/${jobId}/telemetry`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                eventType: "candidate_compared",
+                metadata: { comparedCount: targetIds.length },
+              }),
+            }).catch(() => {});
+          }
         }
       } catch (err) {
         console.error("Failed to load candidate comparison:", err);

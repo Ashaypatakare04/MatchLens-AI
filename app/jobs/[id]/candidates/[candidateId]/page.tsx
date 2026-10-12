@@ -27,10 +27,13 @@ import {
   FileDown,
   Trash2,
   SlidersHorizontal,
+  FileText,
+  MessageSquare,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { InconsistencyCard } from "@/components/InconsistencyCard";
+import { PilotFeedbackModal } from "@/components/PilotFeedbackModal";
 import {
   CandidateProfile,
   MatchAnalysis,
@@ -65,11 +68,13 @@ export default function CandidateDetailPage() {
   // Bias reduction and GDPR delete
   const [anonymizedMode, setAnonymizedMode] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isDownloadingResume, setIsDownloadingResume] = useState(false);
 
   // Model calibration & override feedback
   const [feedbackReason, setFeedbackReason] = useState<RecruiterFeedbackReason>("other");
   const [feedbackComment, setFeedbackComment] = useState("");
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [showPilotFeedbackModal, setShowPilotFeedbackModal] = useState(false);
 
   // Expandable formula toggle (open by default for judges/recruiters)
   const [showFormula, setShowFormula] = useState(true);
@@ -97,6 +102,16 @@ export default function CandidateDetailPage() {
               setFeedbackReason(json.match.recruiterFeedback.reason || "other");
               setFeedbackComment(json.match.recruiterFeedback.comment || "");
             }
+
+            // Log non-PII inspection telemetry for pilot metrics
+            fetch(`/api/jobs/${jobId}/telemetry`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                eventType: "candidate_detail_inspected",
+                candidateId,
+              }),
+            }).catch(() => {});
           }
         }
       } catch (err) {
@@ -195,6 +210,27 @@ export default function CandidateDetailPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadResume = async () => {
+    setIsDownloadingResume(true);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/candidates/${candidateId}/document`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || "Original resume document not available.");
+        return;
+      }
+      const data = await res.json();
+      if (data.downloadUrl) {
+        window.open(data.downloadUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      console.error("Failed to download resume:", err);
+      alert("Failed to access original resume document.");
+    } finally {
+      setIsDownloadingResume(false);
+    }
+  };
+
   const handleDeleteCandidate = async () => {
     if (
       !confirm(
@@ -290,6 +326,27 @@ export default function CandidateDetailPage() {
             >
               <FileDown className="w-3.5 h-3.5" />
               <span>Export Evidence Pack (.md)</span>
+            </button>
+
+            {/* View Original Resume */}
+            <button
+              onClick={handleDownloadResume}
+              disabled={isDownloadingResume}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-50"
+              title="View or download candidate's original uploaded resume file from private storage"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-500" />
+              <span>{isDownloadingResume ? "Opening..." : "View Original Resume"}</span>
+            </button>
+
+            {/* Pilot Validation Feedback */}
+            <button
+              onClick={() => setShowPilotFeedbackModal(true)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition shadow-sm"
+              title="Record structured pilot feedback on ranking and citations"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+              <span>Pilot Feedback</span>
             </button>
 
             {/* Download JSON */}
@@ -1201,6 +1258,16 @@ export default function CandidateDetailPage() {
             <span>{isDeleting ? "Purging Record..." : "Delete Candidate Record"}</span>
           </button>
         </div>
+
+        {/* Phase 8 Pilot Validation Modal */}
+        <PilotFeedbackModal
+          isOpen={showPilotFeedbackModal}
+          onClose={() => setShowPilotFeedbackModal(false)}
+          jobId={jobId}
+          candidateId={candidateId}
+          candidateName={candidate?.name}
+          systemScore={match?.overallScore}
+        />
       </main>
     </div>
   );

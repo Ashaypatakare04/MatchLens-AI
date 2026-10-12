@@ -15,11 +15,20 @@ export type AuditEventType =
   | "candidate_stage_changed"
   | "weights_recalculated"
   | "resume_uploaded"
+  | "resume_parsed"
   | "verification_flag_updated"
   | "candidate_note_added"
   | "candidate_exported"
   | "candidate_deleted"
-  | "recruiter_calibration_feedback";
+  | "recruiter_calibration_feedback"
+  | "pilot_feedback_submitted"
+  | "candidate_detail_inspected"
+  | "evidence_inspected"
+  | "candidate_compared"
+  | "pilot_shortlist_completed"
+  | "admin_recovery_stale_jobs"
+  | "admin_recovery_outbox_flush"
+  | "admin_recovery_job_retry";
 
 export interface AuditEvent {
   id: string;

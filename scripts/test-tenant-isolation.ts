@@ -31,6 +31,7 @@ import {
 import { GET as exportCandidate } from "../app/api/jobs/[id]/candidates/[candidateId]/export/route";
 import { POST as rescoreJob } from "../app/api/jobs/[id]/rescore/route";
 import { GET as getAuditLog } from "../app/api/audit-log/route";
+import { POST as postRegister } from "../app/api/auth/register/route";
 
 function makeRequest(
   url: string,
@@ -601,6 +602,66 @@ async function runTenantIsolationTests() {
     adminDeleteJobRes.status === 200,
     "Admin can delete Job A (Cascades candidate and analysis)",
     `Status: ${adminDeleteJobRes.status}`
+  );
+
+  // ---------------------------------------------------------------------------
+  // TEST 9: Security Gate Regressions (Abuse Prevention & Account Protection)
+  // ---------------------------------------------------------------------------
+  console.log("\n--- TEST 9: Security Gate Verification & Abuse Controls ---");
+
+  // Customer admin cannot seed demo data into customer organization
+  const seedRouteModule = await import("../app/api/demo/seed/route");
+  const customerAdminSeedRes = await seedRouteModule.POST(
+    makeRequest("/api/demo/seed", "POST", tokenA_Adm)
+  );
+  assert(
+    customerAdminSeedRes.status === 403,
+    "Customer Admin cannot pollute customer workspace with demo data (Returns 403)",
+    `Status received: ${customerAdminSeedRes.status}`
+  );
+
+  // User enumeration prevention: Duplicate registration returns generic error
+  const duplicateRegRes = await postRegister(
+    makeRequest("/api/auth/register", "POST", undefined, {
+      organizationName: "Duplicate Corp",
+      name: "Duplicate User",
+      email: userA_Admin.email, // already registered
+      password: "SuperSecretPassword123!",
+    }, {
+      "x-forwarded-for": "198.51.100.1",
+    })
+  );
+  const duplicateRegJson = await duplicateRegRes.json();
+  assert(
+    duplicateRegRes.status === 400 &&
+      duplicateRegJson.error === "Unable to complete registration with the provided details. If you already have an account, please sign in.",
+    "Registration protects against email enumeration with uniform non-disclosing error",
+    `Status: ${duplicateRegRes.status}, Error: "${duplicateRegJson.error}"`
+  );
+
+  // Rate limiting defense: Exceeding 5 registration attempts from same IP returns 429
+  const testIp = "203.0.113.42";
+  let hitRateLimit = false;
+  for (let i = 0; i < 7; i++) {
+    const regRes = await postRegister(
+      makeRequest("/api/auth/register", "POST", undefined, {
+        organizationName: `Spam Org ${i}`,
+        name: `Spam User ${i}`,
+        email: `spam_${Date.now()}_${i}@spamcorp.test`,
+        password: "SpamPassword123!",
+      }, {
+        "x-forwarded-for": testIp,
+      })
+    );
+    if (regRes.status === 429) {
+      hitRateLimit = true;
+      break;
+    }
+  }
+  assert(
+    hitRateLimit,
+    "Registration endpoint enforces IP-based rate limiting (Returns 429 on abuse)",
+    "Successfully throttled rapid registration flood."
   );
 
   console.log("\n================================================================================");

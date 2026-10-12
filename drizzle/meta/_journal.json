@@ -15,6 +15,27 @@
       "when": 1791556485392,
       "tag": "0001_daily_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791596666021,
+      "tag": "0002_broad_micromax",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791606137477,
+      "tag": "0003_fresh_morgan_stark",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791815999000,
+      "tag": "0004_peaceful_black_tom",
+      "breakpoints": true
     }
   ]
 }

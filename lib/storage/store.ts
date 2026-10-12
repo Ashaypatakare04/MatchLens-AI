@@ -7,17 +7,36 @@
  */
 
 import { getDb } from "../db";
-import { jobs, candidates, analyses } from "../db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import {
+  jobs,
+  candidates,
+  analyses,
+  resumeDocuments,
+  processingJobs,
+  processingOutbox,
+  pilotFeedback,
+  users,
+  ResumeDocumentRecord,
+  ProcessingJobRecord,
+  ProcessingOutboxRecord,
+} from "../db/schema";
+import { eq, and, desc, asc, lte, sql } from "drizzle-orm";
+import { getObjectStorageService } from "./object-storage";
+import type { QueueJobPayload } from "../queue/types";
 import {
   Job,
   ExtractedJobRequirements,
   CandidateProfile,
+  CandidateWithMatch,
   MatchAnalysis,
   ScoringWeights,
   RecruiterDecision,
   PipelineStage,
   RecruiterFeedback,
+  PilotFeedbackCategory,
+  PilotDisagreementReason,
+  PilotFeedbackEntry,
+  JobEvaluationReport,
 } from "../types";
 import { analyzeCandidate } from "../engine/analyzer";
 import { AuditLogger } from "../engine/audit-logger";
@@ -128,11 +147,17 @@ export const Store = {
   /**
    * Creates a new job under the authenticated organization.
    */
-  async createJob(organizationId: string, job: Job): Promise<Job> {
+  async createJob(
+    organizationId: string,
+    job: Omit<Job, "createdAt" | "updatedAt"> & Partial<Pick<Job, "createdAt" | "updatedAt">>
+  ): Promise<Job> {
     const db = await getDb();
     const now = new Date();
+    const jobId = job.id || `job-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const createdAtStr = job.createdAt || now.toISOString();
+    const updatedAtStr = job.updatedAt || now.toISOString();
     await db.insert(jobs).values({
-      id: job.id,
+      id: jobId,
       organizationId,
       title: job.title,
       company: job.company,
@@ -143,10 +168,10 @@ export const Store = {
       requirements: job.requirements,
       weights: job.weights,
       version: 1,
-      createdAt: job.createdAt ? new Date(job.createdAt) : now,
-      updatedAt: job.updatedAt ? new Date(job.updatedAt) : now,
+      createdAt: new Date(createdAtStr),
+      updatedAt: new Date(updatedAtStr),
     });
-    return job;
+    return { ...job, id: jobId, createdAt: createdAtStr, updatedAt: updatedAtStr };
   },
 
   /**
@@ -198,7 +223,7 @@ export const Store = {
   },
 
   /**
-   * Deletes a job, verifying organization ownership. Cascades to candidates and analyses.
+   * Deletes a job, verifying organization ownership. Cascades to candidates, analyses, and storage objects.
    */
   async deleteJob(organizationId: string, id: string): Promise<boolean> {
     const db = await getDb();
@@ -209,6 +234,30 @@ export const Store = {
       .limit(1);
 
     if (!existing) return false;
+
+    // Purge associated private resume storage objects before cascading deletion
+    try {
+      const docs = await db
+        .select()
+        .from(resumeDocuments)
+        .where(
+          and(
+            eq(resumeDocuments.jobId, id),
+            eq(resumeDocuments.organizationId, organizationId)
+          )
+        );
+
+      const storage = getObjectStorageService();
+      for (const doc of docs) {
+        try {
+          await storage.deletePrivateObject(doc.storageKey, organizationId);
+        } catch (storageErr) {
+          console.error(`Failed to delete storage object ${doc.storageKey}:`, storageErr);
+        }
+      }
+    } catch (err) {
+      console.error(`Error querying resume documents for job deletion:`, err);
+    }
 
     // Foreign key cascading deletes associated candidates & analyses in PostgreSQL
     await db
@@ -308,6 +357,27 @@ export const Store = {
       .limit(1);
 
     return row ? mapAnalysisRow(row.analysis) : null;
+  },
+
+  /**
+   * Retrieves all candidates for a job paired with their match analysis,
+   * sorted by overallScore descending.
+   */
+  async getCandidatesWithMatches(
+    organizationId: string,
+    jobId: string
+  ): Promise<CandidateWithMatch[]> {
+    const candidates = await this.getCandidates(organizationId, jobId);
+    const matches = await this.getMatches(organizationId, jobId);
+    const matchMap = new Map(matches.map((m) => [m.candidateId, m]));
+
+    return candidates
+      .map((cand) => ({
+        candidate: cand,
+        match: matchMap.get(cand.id)!,
+      }))
+      .filter((item) => item.match !== undefined)
+      .sort((a, b) => b.match.overallScore - a.match.overallScore);
   },
 
   /**
@@ -445,6 +515,31 @@ export const Store = {
     if (!candidate) return false;
 
     const jobId = candidate.jobId;
+
+    // Purge associated private resume storage objects before deleting candidate record
+    try {
+      const docs = await db
+        .select()
+        .from(resumeDocuments)
+        .where(
+          and(
+            eq(resumeDocuments.candidateId, candidateId),
+            eq(resumeDocuments.organizationId, organizationId)
+          )
+        );
+
+      const storage = getObjectStorageService();
+      for (const doc of docs) {
+        try {
+          await storage.deletePrivateObject(doc.storageKey, organizationId);
+        } catch (storageErr) {
+          console.error(`Failed to delete storage object ${doc.storageKey}:`, storageErr);
+        }
+      }
+    } catch (err) {
+      console.error(`Error querying resume documents for candidate deletion:`, err);
+    }
+
     await db
       .delete(candidates)
       .where(
@@ -699,5 +794,1130 @@ export const Store = {
       throw new Error("Failed to load demo job after seeding");
     }
     return { job, candidatesCount: candidateCount };
+  },
+
+  /**
+   * Saves or updates a resume document record under the specified organization.
+   */
+  async saveResumeDocument(
+    organizationId: string,
+    doc: {
+      id: string;
+      jobId: string;
+      candidateId?: string;
+      storageKey: string;
+      storageProvider?: string;
+      fileName: string;
+      fileType?: string;
+      mimeType?: string;
+      fileSize?: number;
+      fileHash: string;
+      status?: string;
+      retentionExpiresAt?: Date | null;
+    }
+  ): Promise<ResumeDocumentRecord> {
+    const db = await getDb();
+    const now = new Date();
+
+    const [saved] = await db
+      .insert(resumeDocuments)
+      .values({
+        id: doc.id,
+        organizationId,
+        jobId: doc.jobId,
+        candidateId: doc.candidateId,
+        storageKey: doc.storageKey,
+        storageProvider: doc.storageProvider || "local",
+        fileName: doc.fileName,
+        fileType: doc.fileType || "pdf",
+        mimeType: doc.mimeType || "application/pdf",
+        fileSize: doc.fileSize || 0,
+        fileHash: doc.fileHash,
+        status: doc.status || "active",
+        retentionExpiresAt: doc.retentionExpiresAt ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: resumeDocuments.id,
+        set: {
+          candidateId: doc.candidateId,
+          storageKey: doc.storageKey,
+          storageProvider: doc.storageProvider || "local",
+          status: doc.status || "active",
+          retentionExpiresAt: doc.retentionExpiresAt ?? null,
+          updatedAt: now,
+        },
+      })
+      .returning();
+
+    return saved;
+  },
+
+  /**
+   * Retrieves a resume document by ID, enforcing organization ownership.
+   */
+  async getResumeDocument(
+    organizationId: string,
+    documentId: string
+  ): Promise<ResumeDocumentRecord | null> {
+    const db = await getDb();
+    const [doc] = await db
+      .select()
+      .from(resumeDocuments)
+      .where(
+        and(
+          eq(resumeDocuments.id, documentId),
+          eq(resumeDocuments.organizationId, organizationId)
+        )
+      )
+      .limit(1);
+
+    return doc || null;
+  },
+
+  /**
+   * Retrieves the resume document for a candidate, enforcing organization ownership.
+   */
+  async getResumeDocumentByCandidate(
+    organizationId: string,
+    candidateId: string
+  ): Promise<ResumeDocumentRecord | null> {
+    const db = await getDb();
+    const [doc] = await db
+      .select()
+      .from(resumeDocuments)
+      .where(
+        and(
+          eq(resumeDocuments.candidateId, candidateId),
+          eq(resumeDocuments.organizationId, organizationId)
+        )
+      )
+      .limit(1);
+
+    return doc || null;
+  },
+
+  /**
+   * Retrieves all resume documents for a job, enforcing organization ownership.
+   */
+  async getResumeDocumentsByJob(
+    organizationId: string,
+    jobId: string
+  ): Promise<ResumeDocumentRecord[]> {
+    const db = await getDb();
+    return db
+      .select()
+      .from(resumeDocuments)
+      .where(
+        and(
+          eq(resumeDocuments.jobId, jobId),
+          eq(resumeDocuments.organizationId, organizationId)
+        )
+      );
+  },
+
+  /**
+   * Deletes a resume document record and purges its storage object.
+   */
+  async deleteResumeDocument(
+    organizationId: string,
+    documentId: string
+  ): Promise<boolean> {
+    const db = await getDb();
+    const doc = await this.getResumeDocument(organizationId, documentId);
+    if (!doc) return false;
+
+    const storage = getObjectStorageService();
+    try {
+      await storage.deletePrivateObject(doc.storageKey, organizationId);
+    } catch (err) {
+      console.error(`Failed to delete storage file ${doc.storageKey}:`, err);
+    }
+
+    await db
+      .delete(resumeDocuments)
+      .where(
+        and(
+          eq(resumeDocuments.id, documentId),
+          eq(resumeDocuments.organizationId, organizationId)
+        )
+      );
+
+    return true;
+  },
+
+  /**
+   * Queries expired documents across all organizations for retention pruning.
+   */
+  async getExpiredDocuments(
+    limit: number = 100
+  ): Promise<ResumeDocumentRecord[]> {
+    const db = await getDb();
+    const now = new Date();
+    return db
+      .select()
+      .from(resumeDocuments)
+      .where(
+        and(
+          eq(resumeDocuments.status, "active"),
+          lte(resumeDocuments.retentionExpiresAt, now)
+        )
+      )
+      .limit(limit);
+  },
+
+  /**
+   * Purges an expired document from object storage and updates its status to 'purged'.
+   */
+  async purgeExpiredDocument(
+    document: ResumeDocumentRecord
+  ): Promise<boolean> {
+    const db = await getDb();
+    const storage = getObjectStorageService();
+
+    try {
+      await storage.deletePrivateObject(document.storageKey, document.organizationId);
+    } catch (err) {
+      console.error(`Failed to delete storage file ${document.storageKey} during retention purge:`, err);
+    }
+
+    await db
+      .update(resumeDocuments)
+      .set({
+        status: "purged",
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeDocuments.id, document.id));
+
+    await AuditLogger.recordEvent(document.organizationId, {
+      eventType: "candidate_deleted",
+      jobId: document.jobId,
+      candidateId: document.candidateId ?? undefined,
+      actor: {
+        userId: "system-retention",
+        userName: "Automated Retention Worker",
+        role: "ADMIN",
+      },
+      notes: `Retention period expired. Storage object ${document.storageKey} purged under GDPR retention compliance.`,
+    });
+
+    return true;
+  },
+
+  /**
+   * Atomically creates a processing job and an outbox event in a single PostgreSQL transaction.
+   * Solves the dual-write problem by guaranteeing neither record is created without the other.
+   */
+  async createProcessingJobWithOutbox(
+    organizationId: string,
+    data: {
+      id: string;
+      jobId: string;
+      documentId: string;
+      fileName: string;
+      fileSize: number;
+      fileHash: string;
+      storageKey: string;
+      idempotencyKey: string;
+    }
+  ): Promise<{ processingJob: ProcessingJobRecord; outbox: ProcessingOutboxRecord }> {
+    const db = await getDb();
+    const now = new Date();
+
+    return await db.transaction(async (tx) => {
+      const [pJob] = await tx
+        .insert(processingJobs)
+        .values({
+          id: data.id,
+          organizationId,
+          jobId: data.jobId,
+          documentId: data.documentId,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          fileHash: data.fileHash,
+          status: "QUEUED",
+          currentStage: "queued",
+          progress: 0,
+          attempts: 0,
+          maxAttempts: 3,
+          idempotencyKey: data.idempotencyKey,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      const outboxPayload: QueueJobPayload = {
+        processingJobId: data.id,
+        organizationId,
+        jobId: data.jobId,
+        documentId: data.documentId,
+        storageKey: data.storageKey,
+        fileName: data.fileName,
+        fileHash: data.fileHash,
+      };
+
+      const [outbox] = await tx
+        .insert(processingOutbox)
+        .values({
+          id: `outbox-${data.id}`,
+          organizationId,
+          processingJobId: data.id,
+          eventType: "resume.process",
+          payload: outboxPayload,
+          status: "PENDING",
+          attempts: 0,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      return { processingJob: pJob, outbox };
+    });
+  },
+
+  /**
+   * Retrieves a processing job by ID, strictly enforcing organization ownership.
+   */
+  async getProcessingJob(
+    organizationId: string,
+    processingJobId: string
+  ): Promise<ProcessingJobRecord | null> {
+    const db = await getDb();
+    const [row] = await db
+      .select()
+      .from(processingJobs)
+      .where(
+        and(
+          eq(processingJobs.id, processingJobId),
+          eq(processingJobs.organizationId, organizationId)
+        )
+      )
+      .limit(1);
+
+    return row || null;
+  },
+
+  /**
+   * Retrieves a processing job by idempotency key, strictly enforcing organization ownership.
+   */
+  async getProcessingJobByIdempotencyKey(
+    organizationId: string,
+    idempotencyKey: string
+  ): Promise<ProcessingJobRecord | null> {
+    const db = await getDb();
+    const [row] = await db
+      .select()
+      .from(processingJobs)
+      .where(
+        and(
+          eq(processingJobs.idempotencyKey, idempotencyKey),
+          eq(processingJobs.organizationId, organizationId)
+        )
+      )
+      .limit(1);
+
+    return row || null;
+  },
+
+  /**
+   * Retrieves paginated processing jobs for a job requisition, enforcing organization ownership.
+   */
+  async getProcessingJobsByJob(
+    organizationId: string,
+    jobId: string,
+    options?: { limit?: number; offset?: number; status?: string }
+  ): Promise<{ items: ProcessingJobRecord[]; total: number }> {
+    const db = await getDb();
+    const limit = Math.min(options?.limit || 50, 100);
+    const offset = Math.max(options?.offset || 0, 0);
+
+    const conditions = [
+      eq(processingJobs.jobId, jobId),
+      eq(processingJobs.organizationId, organizationId),
+    ];
+    if (options?.status) {
+      conditions.push(eq(processingJobs.status, options.status));
+    }
+
+    const whereClause = and(...conditions);
+
+    const items = await db
+      .select()
+      .from(processingJobs)
+      .where(whereClause)
+      .orderBy(desc(processingJobs.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    const totalCountRows = await db
+      .select()
+      .from(processingJobs)
+      .where(whereClause);
+
+    return { items, total: totalCountRows.length };
+  },
+
+  /**
+   * Atomically transitions a processing job to PROCESSING status with an incremented attempt count.
+   * Ensures mutual exclusion so competing workers cannot double-process the same job.
+   */
+  async claimProcessingJob(
+    processingJobId: string
+  ): Promise<ProcessingJobRecord | null> {
+    const db = await getDb();
+    const now = new Date();
+
+    const [claimed] = await db
+      .update(processingJobs)
+      .set({
+        status: "PROCESSING",
+        currentStage: "extracting",
+        progress: 10,
+        attempts: sql`${processingJobs.attempts} + 1`,
+        startedAt: now,
+        heartbeatAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(processingJobs.id, processingJobId),
+          eq(processingJobs.status, "QUEUED")
+        )
+      )
+      .returning();
+
+    return claimed || null;
+  },
+
+  /**
+   * Updates stage, progress percentage, and heartbeat of an active processing job.
+   */
+  async updateProcessingJobProgress(
+    processingJobId: string,
+    update: {
+      stage?: string;
+      progress?: number;
+      heartbeat?: boolean;
+    }
+  ): Promise<boolean> {
+    const db = await getDb();
+    const now = new Date();
+
+    const patch: Partial<typeof processingJobs.$inferInsert> = {
+      updatedAt: now,
+      ...(update.stage && { currentStage: update.stage }),
+      ...(update.progress !== undefined && { progress: update.progress }),
+      ...(update.heartbeat && { heartbeatAt: now }),
+    };
+
+    await db
+      .update(processingJobs)
+      .set(patch)
+      .where(eq(processingJobs.id, processingJobId));
+
+    return true;
+  },
+
+  /**
+   * Marks a processing job COMPLETED or PARTIALLY_FAILED and links the created candidate.
+   */
+  async completeProcessingJob(
+    processingJobId: string,
+    result: {
+      candidateId: string;
+      status?: "COMPLETED" | "PARTIALLY_FAILED";
+      warnings?: string[];
+    }
+  ): Promise<boolean> {
+    const db = await getDb();
+    const now = new Date();
+
+    await db
+      .update(processingJobs)
+      .set({
+        status: result.status || "COMPLETED",
+        candidateId: result.candidateId,
+        currentStage: "completed",
+        progress: 100,
+        completedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(processingJobs.id, processingJobId));
+
+    return true;
+  },
+
+  /**
+   * Records a failure on a processing job with sanitized non-sensitive message.
+   * If canRetry is true and attempts < maxAttempts, reverts to QUEUED for exponential backoff.
+   */
+  async failProcessingJob(
+    processingJobId: string,
+    error: {
+      errorCode: string;
+      errorMessage: string;
+      canRetry?: boolean;
+    }
+  ): Promise<ProcessingJobRecord | null> {
+    const db = await getDb();
+    const now = new Date();
+
+    const [current] = await db
+      .select()
+      .from(processingJobs)
+      .where(eq(processingJobs.id, processingJobId))
+      .limit(1);
+
+    if (!current) return null;
+
+    const shouldRetry = error.canRetry && current.attempts < current.maxAttempts;
+    const nextStatus = shouldRetry ? "QUEUED" : "FAILED";
+    const nextStage = shouldRetry ? "queued" : "failed";
+
+    const [updated] = await db
+      .update(processingJobs)
+      .set({
+        status: nextStatus,
+        currentStage: nextStage,
+        errorCode: error.errorCode,
+        errorMessage: error.errorMessage,
+        completedAt: shouldRetry ? null : now,
+        updatedAt: now,
+      })
+      .where(eq(processingJobs.id, processingJobId))
+      .returning();
+
+    return updated || null;
+  },
+
+  /**
+   * Resets an eligible FAILED processing job to QUEUED for recruiter-initiated manual retry.
+   * Verifies organization ownership.
+   */
+  async retryProcessingJob(
+    organizationId: string,
+    processingJobId: string
+  ): Promise<ProcessingJobRecord | null> {
+    const db = await getDb();
+    const now = new Date();
+
+    return await db.transaction(async (tx) => {
+      const [job] = await tx
+        .select()
+        .from(processingJobs)
+        .where(
+          and(
+            eq(processingJobs.id, processingJobId),
+            eq(processingJobs.organizationId, organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!job || (job.status !== "FAILED" && job.status !== "PARTIALLY_FAILED")) {
+        return null;
+      }
+
+      // Check that document still exists and has not been purged
+      const [doc] = await tx
+        .select()
+        .from(resumeDocuments)
+        .where(
+          and(
+            eq(resumeDocuments.id, job.documentId),
+            eq(resumeDocuments.organizationId, organizationId)
+          )
+        )
+        .limit(1);
+
+      if (!doc || doc.status === "purged") {
+        return null; // Cannot retry purged documents
+      }
+
+      const [updated] = await tx
+        .update(processingJobs)
+        .set({
+          status: "QUEUED",
+          currentStage: "queued",
+          progress: 0,
+          errorCode: null,
+          errorMessage: null,
+          startedAt: null,
+          completedAt: null,
+          updatedAt: now,
+        })
+        .where(eq(processingJobs.id, processingJobId))
+        .returning();
+
+      // Ensure outbox event exists for publication
+      const outboxPayload: QueueJobPayload = {
+        processingJobId: job.id,
+        organizationId,
+        jobId: job.jobId,
+        documentId: job.documentId,
+        storageKey: doc.storageKey,
+        fileName: job.fileName,
+        fileHash: job.fileHash,
+      };
+
+      await tx
+        .insert(processingOutbox)
+        .values({
+          id: `outbox-${job.id}-${Date.now()}`,
+          organizationId,
+          processingJobId: job.id,
+          eventType: "resume.process",
+          payload: outboxPayload,
+          status: "PENDING",
+          attempts: 0,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing();
+
+      return updated;
+    });
+  },
+
+  /**
+   * Fetches pending outbox events across organizations to publish to queue.
+   */
+  async getPendingOutboxEvents(limit: number = 20): Promise<ProcessingOutboxRecord[]> {
+    const db = await getDb();
+    return db
+      .select()
+      .from(processingOutbox)
+      .where(eq(processingOutbox.status, "PENDING"))
+      .orderBy(asc(processingOutbox.createdAt))
+      .limit(limit);
+  },
+
+  /**
+   * Marks an outbox event as successfully published to the queue.
+   */
+  async markOutboxEventPublished(outboxId: string): Promise<boolean> {
+    const db = await getDb();
+    await db
+      .update(processingOutbox)
+      .set({
+        status: "PUBLISHED",
+        publishedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(processingOutbox.id, outboxId));
+    return true;
+  },
+
+  /**
+   * Records a failure publishing an outbox event.
+   */
+  async markOutboxEventFailed(outboxId: string, errorMsg: string): Promise<boolean> {
+    const db = await getDb();
+    await db
+      .update(processingOutbox)
+      .set({
+        status: "FAILED",
+        lastError: errorMsg,
+        attempts: sql`${processingOutbox.attempts} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(eq(processingOutbox.id, outboxId));
+    return true;
+  },
+
+  /**
+   * Fetches queued jobs directly for processing (used by worker).
+   */
+  async getPendingProcessingJobs(limit: number = 10): Promise<ProcessingJobRecord[]> {
+    const db = await getDb();
+    return db
+      .select()
+      .from(processingJobs)
+      .where(eq(processingJobs.status, "QUEUED"))
+      .orderBy(asc(processingJobs.createdAt))
+      .limit(limit);
+  },
+
+  /**
+   * Recovers crashed workers by finding jobs stuck in PROCESSING with stale heartbeats.
+   */
+  async recoverStaleProcessingJobs(
+    staleThresholdMs: number = 5 * 60 * 1000
+  ): Promise<{ recoveredCount: number; failedCount: number }> {
+    const db = await getDb();
+    const cutoff = new Date(Date.now() - staleThresholdMs);
+
+    const staleJobs = await db
+      .select()
+      .from(processingJobs)
+      .where(
+        and(
+          eq(processingJobs.status, "PROCESSING"),
+          lte(processingJobs.heartbeatAt, cutoff)
+        )
+      );
+
+    let recoveredCount = 0;
+    let failedCount = 0;
+
+    for (const job of staleJobs) {
+      if (job.attempts < job.maxAttempts) {
+        await db
+          .update(processingJobs)
+          .set({
+            status: "QUEUED",
+            currentStage: "queued",
+            progress: 0,
+            errorMessage: "Worker heartbeat expired. Automatically requeued.",
+            updatedAt: new Date(),
+          })
+          .where(eq(processingJobs.id, job.id));
+        recoveredCount++;
+      } else {
+        await db
+          .update(processingJobs)
+          .set({
+            status: "FAILED",
+            currentStage: "failed",
+            errorCode: "WORKER_TIMEOUT",
+            errorMessage: "Processing exceeded maximum worker heartbeat timeout.",
+            completedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(processingJobs.id, job.id));
+        failedCount++;
+      }
+    }
+
+    return { recoveredCount, failedCount };
+  },
+
+  /**
+   * Submits structured pilot feedback from an authorized recruiter.
+   * Scoped strictly by organizationId. Validates job and candidate references.
+   * Captures snapshot of system score, rank, and recruiter decision.
+   * Does NOT mutate match scores or candidate analysis.
+   */
+  async createPilotFeedback(
+    organizationId: string,
+    input: {
+      jobId: string;
+      candidateId?: string;
+      category: PilotFeedbackCategory;
+      disagreementReason?: PilotDisagreementReason;
+      comment?: string;
+      perceivedTrustScore?: number;
+      perceivedUsefulnessScore?: number;
+      timeSavedMinutes?: number;
+      metadata?: Record<string, unknown>;
+    },
+    actor: { userId: string; userName: string; role: UserRole }
+  ): Promise<PilotFeedbackEntry | null> {
+    const db = await getDb();
+    // 1. Verify job belongs to organization
+    const job = await this.getJob(organizationId, input.jobId);
+    if (!job) return null;
+
+    let analysisId: string | undefined = undefined;
+    let systemScore: number | undefined = undefined;
+    let systemRank: number | undefined = undefined;
+    let recruiterDecision: RecruiterDecision | undefined = undefined;
+
+    // 2. If candidateId provided, verify candidate belongs to this job & org
+    if (input.candidateId) {
+      const candidate = await this.getCandidate(organizationId, input.candidateId);
+      if (!candidate || candidate.jobId !== input.jobId) return null;
+
+      const match = await this.getMatch(organizationId, input.candidateId);
+      if (match) {
+        analysisId = `analysis-${input.candidateId}`;
+        systemScore = match.overallScore;
+        recruiterDecision = match.recruiterDecision;
+
+        // Calculate candidate's current system rank in this job
+        const allCandidates = await this.getCandidatesWithMatches(organizationId, input.jobId);
+        const rankIndex = allCandidates.findIndex((c) => c.candidate.id === input.candidateId);
+        if (rankIndex !== -1) {
+          systemRank = rankIndex + 1;
+        }
+      }
+    }
+
+    const id = `pfeed-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const now = new Date();
+
+    const [inserted] = await db
+      .insert(pilotFeedback)
+      .values({
+        id,
+        organizationId,
+        jobId: input.jobId,
+        candidateId: input.candidateId || null,
+        analysisId: analysisId || null,
+        userId: actor.userId,
+        category: input.category,
+        disagreementReason: input.disagreementReason || null,
+        systemRank: systemRank ?? null,
+        systemScore: systemScore ?? null,
+        recruiterDecision: recruiterDecision ?? null,
+        comment: input.comment ? input.comment.trim() : null,
+        perceivedTrustScore: input.perceivedTrustScore ?? null,
+        perceivedUsefulnessScore: input.perceivedUsefulnessScore ?? null,
+        timeSavedMinutes: input.timeSavedMinutes ?? null,
+        metadata: input.metadata || null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    if (!inserted) return null;
+
+    // Record non-PII audit event for telemetry
+    await AuditLogger.recordEvent(organizationId, {
+      eventType: "pilot_feedback_submitted",
+      jobId: input.jobId,
+      candidateId: input.candidateId,
+      actor,
+      reasonCategory: input.category,
+      notes: input.disagreementReason || undefined,
+      metadata: {
+        feedbackId: id,
+        systemRank,
+        systemScore,
+        recruiterDecision,
+        perceivedTrustScore: input.perceivedTrustScore,
+        perceivedUsefulnessScore: input.perceivedUsefulnessScore,
+      },
+    });
+
+    return {
+      id: inserted.id,
+      organizationId: inserted.organizationId,
+      jobId: inserted.jobId,
+      candidateId: inserted.candidateId || undefined,
+      analysisId: inserted.analysisId || undefined,
+      userId: inserted.userId,
+      userName: actor.userName,
+      category: inserted.category as PilotFeedbackCategory,
+      disagreementReason: (inserted.disagreementReason as PilotDisagreementReason) || undefined,
+      systemRank: inserted.systemRank ?? undefined,
+      systemScore: inserted.systemScore ?? undefined,
+      recruiterDecision: (inserted.recruiterDecision as RecruiterDecision) || undefined,
+      comment: inserted.comment || undefined,
+      perceivedTrustScore: inserted.perceivedTrustScore ?? undefined,
+      perceivedUsefulnessScore: inserted.perceivedUsefulnessScore ?? undefined,
+      timeSavedMinutes: inserted.timeSavedMinutes ?? undefined,
+      metadata: (inserted.metadata as Record<string, unknown>) || undefined,
+      createdAt: inserted.createdAt.toISOString(),
+    };
+  },
+
+  /**
+   * Retrieves all pilot feedback for a job, verifying organization ownership.
+   */
+  async getPilotFeedbackForJob(
+    organizationId: string,
+    jobId: string
+  ): Promise<PilotFeedbackEntry[]> {
+    const db = await getDb();
+    const job = await this.getJob(organizationId, jobId);
+    if (!job) return [];
+
+    const rows = await db
+      .select({
+        fb: pilotFeedback,
+        userName: users.name,
+      })
+      .from(pilotFeedback)
+      .leftJoin(users, eq(pilotFeedback.userId, users.id))
+      .where(
+        and(
+          eq(pilotFeedback.jobId, jobId),
+          eq(pilotFeedback.organizationId, organizationId)
+        )
+      )
+      .orderBy(desc(pilotFeedback.createdAt));
+
+    return rows.map(({ fb, userName }) => ({
+      id: fb.id,
+      organizationId: fb.organizationId,
+      jobId: fb.jobId,
+      candidateId: fb.candidateId || undefined,
+      analysisId: fb.analysisId || undefined,
+      userId: fb.userId,
+      userName: userName || undefined,
+      category: fb.category as PilotFeedbackCategory,
+      disagreementReason: (fb.disagreementReason as PilotDisagreementReason) || undefined,
+      systemRank: fb.systemRank ?? undefined,
+      systemScore: fb.systemScore ?? undefined,
+      recruiterDecision: (fb.recruiterDecision as RecruiterDecision) || undefined,
+      comment: fb.comment || undefined,
+      perceivedTrustScore: fb.perceivedTrustScore ?? undefined,
+      perceivedUsefulnessScore: fb.perceivedUsefulnessScore ?? undefined,
+      timeSavedMinutes: fb.timeSavedMinutes ?? undefined,
+      metadata: (fb.metadata as Record<string, unknown>) || undefined,
+      createdAt: fb.createdAt.toISOString(),
+    }));
+  },
+
+  /**
+   * Retrieves pilot feedback for a single candidate, verifying organization ownership.
+   */
+  async getPilotFeedbackForCandidate(
+    organizationId: string,
+    candidateId: string
+  ): Promise<PilotFeedbackEntry[]> {
+    const db = await getDb();
+    const candidate = await this.getCandidate(organizationId, candidateId);
+    if (!candidate) return [];
+
+    const rows = await db
+      .select({
+        fb: pilotFeedback,
+        userName: users.name,
+      })
+      .from(pilotFeedback)
+      .leftJoin(users, eq(pilotFeedback.userId, users.id))
+      .where(
+        and(
+          eq(pilotFeedback.candidateId, candidateId),
+          eq(pilotFeedback.organizationId, organizationId)
+        )
+      )
+      .orderBy(desc(pilotFeedback.createdAt));
+
+    return rows.map(({ fb, userName }) => ({
+      id: fb.id,
+      organizationId: fb.organizationId,
+      jobId: fb.jobId,
+      candidateId: fb.candidateId || undefined,
+      analysisId: fb.analysisId || undefined,
+      userId: fb.userId,
+      userName: userName || undefined,
+      category: fb.category as PilotFeedbackCategory,
+      disagreementReason: (fb.disagreementReason as PilotDisagreementReason) || undefined,
+      systemRank: fb.systemRank ?? undefined,
+      systemScore: fb.systemScore ?? undefined,
+      recruiterDecision: (fb.recruiterDecision as RecruiterDecision) || undefined,
+      comment: fb.comment || undefined,
+      perceivedTrustScore: fb.perceivedTrustScore ?? undefined,
+      perceivedUsefulnessScore: fb.perceivedUsefulnessScore ?? undefined,
+      timeSavedMinutes: fb.timeSavedMinutes ?? undefined,
+      metadata: (fb.metadata as Record<string, unknown>) || undefined,
+      createdAt: fb.createdAt.toISOString(),
+    }));
+  },
+
+  /**
+   * Generates a comprehensive Evaluation Report for a job requisition,
+   * synthesizing observed facts, automated predictions, and recruiter judgments.
+   */
+  async getJobEvaluationReport(
+    organizationId: string,
+    jobId: string
+  ): Promise<JobEvaluationReport | null> {
+    const db = await getDb();
+    const job = await this.getJob(organizationId, jobId);
+    if (!job) return null;
+
+    // 1. Fetch candidate profiles and match analyses
+    const candPairs = await this.getCandidatesWithMatches(organizationId, jobId);
+    const feedbackList = await this.getPilotFeedbackForJob(organizationId, jobId);
+
+    // 2. Fetch processing jobs metrics for this job
+    const pJobs = await db
+      .select()
+      .from(processingJobs)
+      .where(
+        and(
+          eq(processingJobs.jobId, jobId),
+          eq(processingJobs.organizationId, organizationId)
+        )
+      );
+
+    const totalProcessed = pJobs.length;
+    const completedPJobs = pJobs.filter((p) => p.status === "COMPLETED");
+    const failedPJobs = pJobs.filter((p) => p.status === "FAILED");
+    const failureRatePercent = totalProcessed > 0
+      ? Math.round((failedPJobs.length / totalProcessed) * 1000) / 10
+      : 0;
+
+    let totalDurationMs = 0;
+    let durationCount = 0;
+    for (const pj of completedPJobs) {
+      if (pj.completedAt && pj.startedAt) {
+        totalDurationMs += new Date(pj.completedAt).getTime() - new Date(pj.startedAt).getTime();
+        durationCount++;
+      }
+    }
+    const averageProcessingDurationMs = durationCount > 0 ? Math.round(totalDurationMs / durationCount) : null;
+
+    // 3. Candidate rankings array
+    const candidateRankings = candPairs.map((pair, index) => ({
+      rank: index + 1,
+      candidateId: pair.candidate.id,
+      candidateName: pair.candidate.name,
+      overallScore: pair.match.overallScore,
+      aiRecommendation: pair.match.aiRecommendation,
+      recruiterDecision: pair.match.recruiterDecision || "unreviewed",
+      pipelineStage: pair.match.pipelineStage,
+      missingRequirementsCount: pair.match.missingRequirements.length,
+      strongMatchesCount: pair.match.strongMatches.length,
+      potentialInconsistenciesCount: pair.match.potentialInconsistencies.length,
+      relevantExperienceYears: pair.match.relevantExperienceYears,
+    }));
+
+    // 4. Summaries & Decision completion
+    const totalCandidates = candPairs.length;
+    const shortlistedCount = candPairs.filter((c) => c.match.recruiterDecision === "shortlisted").length;
+    const maybeCount = candPairs.filter((c) => c.match.recruiterDecision === "maybe").length;
+    const rejectedCount = candPairs.filter((c) => c.match.recruiterDecision === "rejected").length;
+    const unreviewedCount = candPairs.filter((c) => !c.match.recruiterDecision || c.match.recruiterDecision === "unreviewed").length;
+    const reviewedCount = totalCandidates - unreviewedCount;
+    const decisionCompletionRatePercent = totalCandidates > 0
+      ? Math.round((reviewedCount / totalCandidates) * 1000) / 10
+      : 0;
+
+    // 5. Disagreements and reasons breakdown
+    const candidateMap = new Map(candPairs.map((c) => [c.candidate.id, c.candidate.name]));
+    const disagreementFeedback = feedbackList.filter(
+      (f) =>
+        f.category === "relevant_ranked_too_low" ||
+        f.category === "irrelevant_ranked_too_high" ||
+        Boolean(f.disagreementReason)
+    );
+
+    const disagreements = disagreementFeedback.map((f) => ({
+      candidateId: f.candidateId || "",
+      candidateName: (f.candidateId && candidateMap.get(f.candidateId)) || "General Job Feedback",
+      systemRank: f.systemRank || 0,
+      systemScore: f.systemScore || 0,
+      recruiterDecision: f.recruiterDecision || "unreviewed",
+      category: f.category,
+      disagreementReason: f.disagreementReason,
+      comment: f.comment,
+      createdAt: f.createdAt,
+    }));
+
+    const commonDisagreementReasons: Record<string, number> = {};
+    for (const f of disagreementFeedback) {
+      if (f.disagreementReason) {
+        commonDisagreementReasons[f.disagreementReason] = (commonDisagreementReasons[f.disagreementReason] || 0) + 1;
+      }
+    }
+
+    const evidenceFeedbackList = feedbackList
+      .filter((f) => f.category === "evidence_unsupported" || f.category === "qualification_missing" || f.category === "inconsistency_misleading")
+      .map((f) => ({
+        candidateId: f.candidateId,
+        candidateName: f.candidateId ? candidateMap.get(f.candidateId) : undefined,
+        category: f.category,
+        comment: f.comment,
+        createdAt: f.createdAt,
+      }));
+
+    // 6. User-reported trust, usefulness, and time saved
+    let totalTrust = 0;
+    let trustCount = 0;
+    let totalUsefulness = 0;
+    let usefulnessCount = 0;
+    let totalReportedTimeSavedMinutes = 0;
+
+    for (const f of feedbackList) {
+      if (typeof f.perceivedTrustScore === "number") {
+        totalTrust += f.perceivedTrustScore;
+        trustCount++;
+      }
+      if (typeof f.perceivedUsefulnessScore === "number") {
+        totalUsefulness += f.perceivedUsefulnessScore;
+        usefulnessCount++;
+      }
+      if (typeof f.timeSavedMinutes === "number") {
+        totalReportedTimeSavedMinutes += f.timeSavedMinutes;
+      }
+    }
+
+    const averageTrustScore = trustCount > 0 ? Math.round((totalTrust / trustCount) * 10) / 10 : null;
+    const averageUsefulnessScore = usefulnessCount > 0 ? Math.round((totalUsefulness / usefulnessCount) * 10) / 10 : null;
+
+    // 7. Precision@K calculation
+    let precisionAt3: number | null = null;
+    if (candPairs.length >= 3) {
+      const top3 = candidateRankings.slice(0, 3);
+      const top3Shortlisted = top3.filter((c) => c.recruiterDecision === "shortlisted").length;
+      precisionAt3 = Math.round((top3Shortlisted / 3) * 100) / 100;
+    }
+
+    let precisionAt5: number | null = null;
+    if (candPairs.length >= 5) {
+      const top5 = candidateRankings.slice(0, 5);
+      const top5Shortlisted = top5.filter((c) => c.recruiterDecision === "shortlisted").length;
+      precisionAt5 = Math.round((top5Shortlisted / 5) * 100) / 100;
+    }
+
+    return {
+      job: {
+        id: job.id,
+        title: job.title,
+        company: job.company,
+        requirementsUsed: {
+          requiredSkills: job.requirements.requiredSkills || [],
+          preferredSkills: job.requirements.preferredSkills || [],
+          minExperienceYears: job.requirements.minExperienceYears || 0,
+          responsibilities: job.requirements.keyResponsibilities || [],
+        },
+      },
+      candidateRankings,
+      summary: {
+        totalCandidates,
+        reviewedCount,
+        shortlistedCount,
+        maybeCount,
+        rejectedCount,
+        unreviewedCount,
+        decisionCompletionRatePercent,
+        rankingDisagreementsCount: disagreements.length,
+        evidenceFeedbackCount: evidenceFeedbackList.length,
+        averageTrustScore,
+        averageUsefulnessScore,
+        totalReportedTimeSavedMinutes,
+      },
+      disagreements,
+      evidenceFeedback: evidenceFeedbackList,
+      commonDisagreementReasons,
+      processingMetrics: {
+        totalProcessed,
+        averageProcessingDurationMs,
+        failureRatePercent,
+      },
+      rankingMetrics: {
+        precisionAt3,
+        precisionAt5,
+        sampleSize: reviewedCount,
+        hasSufficientData: reviewedCount >= 20,
+        limitationsNotice:
+          "Statistical Disclaimer: Pilot evaluations with N <= 5 recruiters provide qualitative direction and workflow feedback. Small sample sizes are insufficient to claim overall product-market fit or statistically significant ranking superiority.",
+      },
+      factsVsPredictionsVsJudgments: {
+        observedFacts: [
+          `Ingested ${totalCandidates} candidate documents across private tenant storage.`,
+          `Average background processing latency: ${averageProcessingDurationMs !== null ? `${averageProcessingDurationMs}ms` : "N/A"}.`,
+          `Background processing error rate: ${failureRatePercent}%.`,
+          `Extracted ${job.requirements.requiredSkills.length} required skills and ${job.requirements.preferredSkills.length} preferred skills from requisition.`,
+        ],
+        automatedPredictions: [
+          "MatchLens composite match score (0 - 100) based on weighted formula.",
+          "AI recommendation category (Strong Match, Consider, Review Required, Low Alignment).",
+          "Calculated total vs relevant experience years and timeline gap detection.",
+          "Conservative transferable skill projections and potential inconsistency warnings.",
+        ],
+        recruiterJudgments: [
+          `Recruiter decision breakdown: ${shortlistedCount} Shortlisted, ${maybeCount} Maybe, ${rejectedCount} Rejected, ${unreviewedCount} Unreviewed.`,
+          `Recruiter-recorded ranking disagreements: ${disagreements.length}.`,
+          `Recruiter average trust rating: ${averageTrustScore !== null ? `${averageTrustScore}/5.0` : "Not yet rated"}.`,
+          `Recruiter average usefulness rating: ${averageUsefulnessScore !== null ? `${averageUsefulnessScore}/5.0` : "Not yet rated"}.`,
+        ],
+      },
+    };
   },
 };

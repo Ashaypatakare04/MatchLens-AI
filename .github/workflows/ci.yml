@@ -1,0 +1,212 @@
+name: MatchLens AI - CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'feature/**'
+  pull_request:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Code Quality & Static Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies (Strict Lockfile)
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run TypeScript Type Check
+        run: npm run typecheck
+
+  test-matrix:
+    name: Automated Test Suites & Tenant Isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: matchlens_test
+          POSTGRES_PASSWORD: test_password_secure
+          POSTGRES_DB: matchlens_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Database Persistence & Optimistic Locking Tests
+        run: npm run test:db
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+      - name: Run Multi-Tenant Isolation & Security Tests
+        run: npm run test:isolation
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+      - name: Run Private Storage & Data Retention Tests
+        run: npm run test:storage
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+      - name: Run Asynchronous Queue, Outbox & Worker Recovery Tests
+        run: npm run test:queue
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+      - name: Run Security Edge Cases & File Traversal Tests
+        run: npm run test:edge-cases
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+      - name: Run AI Semantic Matching Benchmark Tests
+        run: npm run test:benchmark
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+      - name: Run Observability, Redaction, Health & Recovery Tests
+        run: npm run test:observability
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+      - name: Run Phase 8 Recruiter Validation & Telemetry Tests
+        run: npm run test:validation
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+          AUTH_SECRET: matchlens-ci-test-secret-key-32-chars-long-minimum
+
+  migration-verification:
+    name: Database Migration Clean-Room Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: migration_test
+          POSTGRES_PASSWORD: migration_test_pass
+          POSTGRES_DB: migration_clean_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply Migrations to Clean Database
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://migration_test:migration_test_pass@localhost:5433/migration_clean_db?sslmode=disable
+
+      - name: Verify Migration Idempotency (Second Pass)
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://migration_test:migration_test_pass@localhost:5433/migration_clean_db?sslmode=disable
+
+  security-and-audit:
+    name: Supply Chain & Secret Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Dependency Vulnerability Audit (Critical Gate)
+        run: npm audit --audit-level=critical
+
+      - name: Secret Leak Prevention Check
+        run: |
+          # Verify no committed live secrets or private keys exist in tracked files
+          echo "Scanning for accidentally committed sensitive keys..."
+          git grep -I -E "(AKIA[0-9A-Z]{16}|BEGIN (RSA|EC|OPENSSH) PRIVATE KEY)" -- ':!.env.example' ':!scripts/' || true
+
+  production-build:
+    name: Next.js Production Build Verification
+    needs: [lint-and-typecheck, test-matrix, migration-verification]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js Web Application
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_TELEMETRY_DISABLED: 1
+          AUTH_SECRET: matchlens-prod-build-dummy-secret-32-chars

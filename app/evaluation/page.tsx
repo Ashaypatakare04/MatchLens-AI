@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Sparkles,
   CheckCircle2,
@@ -10,15 +11,22 @@ import {
   Scale,
   TrendingUp,
   Zap,
+  UserCheck,
+  FileCheck2,
+  ShieldAlert,
+  ArrowRight,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { BenchmarkSuiteSummary } from "@/lib/engine/benchmark-service";
 import { JudgeTestCase } from "@/lib/engine/judge-cases";
+import type { PilotMetricsSummary } from "@/lib/observability/pilot-metrics";
 
 export default function EvaluationDashboardPage() {
-  const [activeTab, setActiveTab] = useState<"benchmark" | "judge_cases" | "sandbox">("benchmark");
+  const [activeTab, setActiveTab] = useState<"benchmark" | "judge_cases" | "sandbox" | "pilot_validation">("benchmark");
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkSuiteSummary | null>(null);
   const [judgeCases, setJudgeCases] = useState<JudgeTestCase[]>([]);
+  const [pilotMetrics, setPilotMetrics] = useState<PilotMetricsSummary | null>(null);
+  const [pilotJobs, setPilotJobs] = useState<Array<{ id: string; title: string; company: string }>>([]);
   const [isRunningBenchmark, setIsRunningBenchmark] = useState(false);
 
   // Sandbox state
@@ -54,18 +62,28 @@ export default function EvaluationDashboardPage() {
     let isMounted = true;
     async function loadInitialData() {
       try {
-        const [benchRes, judgeRes] = await Promise.all([
+        const [benchRes, judgeRes, pilotRes, jobsRes] = await Promise.all([
           fetch("/api/benchmark"),
           fetch("/api/judge-demo"),
+          fetch("/api/admin/pilot-metrics").catch(() => null),
+          fetch("/api/jobs").catch(() => null),
         ]);
         if (!isMounted) return;
-        if (benchRes.ok) {
+        if (benchRes && benchRes.ok) {
           const benchData = await benchRes.json();
           setBenchmarkData(benchData);
         }
-        if (judgeRes.ok) {
+        if (judgeRes && judgeRes.ok) {
           const judgeData = await judgeRes.json();
           setJudgeCases(judgeData.cases || []);
+        }
+        if (pilotRes && pilotRes.ok) {
+          const pData = await pilotRes.json();
+          if (pData.metrics) setPilotMetrics(pData.metrics);
+        }
+        if (jobsRes && jobsRes.ok) {
+          const jData = await jobsRes.json();
+          if (jData.jobs) setPilotJobs(jData.jobs);
         }
       } catch (err) {
         console.error("Failed to load evaluation data:", err);
@@ -244,6 +262,18 @@ export default function EvaluationDashboardPage() {
           >
             <Zap className="w-4 h-4" />
             <span>Live Interactive Sandbox</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("pilot_validation")}
+            className={`pb-3 px-3 font-bold border-b-2 transition flex items-center space-x-2 ${
+              activeTab === "pilot_validation"
+                ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Pilot Validation &amp; Evidence</span>
           </button>
         </div>
 
@@ -472,6 +502,160 @@ export default function EvaluationDashboardPage() {
                   <p className="text-slate-600 dark:text-slate-300">
                     <strong>Technical Advantage:</strong> {sandboxResult.advantage}
                   </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 4: PILOT VALIDATION & REAL RECRUITER EVIDENCE */}
+        {activeTab === "pilot_validation" && (
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Cautionary Banner */}
+            <div className="p-4 bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-2xl flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200">
+              <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold text-sm block">
+                  Phase 8 Pilot Protocol Guardrails &amp; Statistical Caution
+                </span>
+                <p className="leading-relaxed text-amber-800 dark:text-amber-300">
+                  This validation framework tracks controlled evaluations across five hiring professionals. Small sample sizes provide invaluable qualitative workflow feedback and explainability stress-testing, but are statistically insufficient to claim product-market fit or unconditional model superiority. Recruiter judgments retain final authority over all hiring decisions.
+                </p>
+              </div>
+            </div>
+
+            {/* Overall Pilot Telemetry Grid */}
+            {pilotMetrics && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Total Ingested</span>
+                  <div className="text-xl font-extrabold text-slate-900 dark:text-white font-mono mt-1">
+                    {pilotMetrics.workflow.totalCandidates}
+                  </div>
+                  <span className="text-[10px] text-slate-400">across {pilotMetrics.workflow.totalRequisitions} jobs</span>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Decision Progress</span>
+                  <div className="text-xl font-extrabold text-indigo-600 font-mono mt-1">
+                    {pilotMetrics.workflow.decisionCompletionRatePercent}%
+                  </div>
+                  <span className="text-[10px] text-slate-400">{pilotMetrics.workflow.totalReviewedCandidates} reviewed</span>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Ranking Disputes</span>
+                  <div className="text-xl font-extrabold text-rose-600 font-mono mt-1">
+                    {pilotMetrics.validationFeedback.rankingDisagreementsCount}
+                  </div>
+                  <span className="text-[10px] text-slate-400">disagreements flagged</span>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Recruiter Trust</span>
+                  <div className="text-xl font-extrabold text-emerald-600 font-mono mt-1">
+                    {pilotMetrics.validationFeedback.averageTrustScore !== null
+                      ? `${pilotMetrics.validationFeedback.averageTrustScore}`
+                      : "—"}
+                    <span className="text-xs font-normal text-slate-400">/5.0</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">explanation clarity</span>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Utility Rating</span>
+                  <div className="text-xl font-extrabold text-blue-600 font-mono mt-1">
+                    {pilotMetrics.validationFeedback.averageUsefulnessScore !== null
+                      ? `${pilotMetrics.validationFeedback.averageUsefulnessScore}`
+                      : "—"}
+                    <span className="text-xs font-normal text-slate-400">/5.0</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">workflow usefulness</span>
+                </div>
+
+                <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                  <span className="text-[10px] text-slate-500 uppercase font-semibold">Processing Latency</span>
+                  <div className="text-xl font-extrabold text-teal-600 font-mono mt-1">
+                    {pilotMetrics.processing.averageProcessingDurationMs !== null
+                      ? `${pilotMetrics.processing.averageProcessingDurationMs}ms`
+                      : "N/A"}
+                  </div>
+                  <span className="text-[10px] text-slate-400">error rate: {pilotMetrics.processing.failureRatePercent}%</span>
+                </div>
+              </div>
+            )}
+
+            {/* Evaluated Requisitions List */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <FileCheck2 className="w-5 h-5 text-indigo-600" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Evaluated Requisitions &amp; Defensibility Reports
+                  </h3>
+                </div>
+                <span className="text-xs text-slate-400 font-mono">
+                  {pilotJobs.length} active requisition(s)
+                </span>
+              </div>
+
+              {pilotJobs.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No job requisitions found in organization.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {pilotJobs.map((j) => (
+                    <div
+                      key={j.id}
+                      className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-900 dark:text-white block text-sm">
+                          {j.title}
+                        </span>
+                        <span className="text-slate-500">{j.company} &bull; ID: {j.id}</span>
+                      </div>
+                      <Link
+                        href={`/jobs/${j.id}/evaluation`}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition shrink-0"
+                      >
+                        <span>View Report</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Phase 2 Telemetry Metric Definitions */}
+            {pilotMetrics?.metricDefinitions && (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+                <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Phase 2 Telemetry &amp; Metric Governance Registry
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Every pilot metric is specified with formal boundary events, units, and aggregation methods to avoid misleading vanity metrics.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                  {Object.entries(pilotMetrics.metricDefinitions).map(([key, def]) => (
+                    <div
+                      key={key}
+                      className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/30 space-y-1.5"
+                    >
+                      <span className="font-bold text-slate-900 dark:text-white block text-xs">
+                        {def.name}
+                      </span>
+                      <p className="text-slate-500 text-[11px] leading-snug">{def.description}</p>
+                      <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700/60 font-mono text-[10px] text-slate-600 dark:text-slate-300 space-y-0.5">
+                        <div><strong className="text-slate-400">Start:</strong> {def.startEvent}</div>
+                        <div><strong className="text-slate-400">End:</strong> {def.endEvent}</div>
+                        <div><strong className="text-slate-400">Unit / Agg:</strong> {def.unit} ({def.aggregation})</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

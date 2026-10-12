@@ -46,7 +46,7 @@ export async function seedDemoData(): Promise<{
   console.log(`[Demo Seed] Seeded organization: ${DEMO_ORG_ID}`);
 
   // 2. Seed demo users
-  const defaultPasswordHash = bcrypt.hashSync("MatchLens2026!", 10);
+  const defaultPasswordHash = bcrypt.hashSync("CloudScale!2026", 10);
 
   await db
     .insert(users)

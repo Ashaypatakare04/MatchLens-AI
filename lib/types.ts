@@ -327,3 +327,123 @@ export interface EdgeCaseTestCase {
     details: string;
   };
 }
+
+export type PilotFeedbackCategory =
+  | "ranking_correct"
+  | "relevant_ranked_too_low"
+  | "irrelevant_ranked_too_high"
+  | "evidence_unsupported"
+  | "qualification_missing"
+  | "transferable_skill_incorrect"
+  | "inconsistency_misleading"
+  | "workflow_confusing"
+  | "processing_failed"
+  | "other";
+
+export type PilotDisagreementReason =
+  | "relevant_experience_overlooked"
+  | "transferable_skill_incorrect"
+  | "qualification_misunderstood"
+  | "unsupported_candidate_claim"
+  | "seniority_mismatch"
+  | "duration_misinterpreted"
+  | "other";
+
+export interface PilotFeedbackEntry {
+  id: string;
+  organizationId: string;
+  jobId: string;
+  candidateId?: string;
+  analysisId?: string;
+  userId: string;
+  userName?: string;
+  category: PilotFeedbackCategory;
+  disagreementReason?: PilotDisagreementReason;
+  systemRank?: number;
+  systemScore?: number;
+  recruiterDecision?: RecruiterDecision;
+  comment?: string;
+  perceivedTrustScore?: number; // 1 - 5
+  perceivedUsefulnessScore?: number; // 1 - 5
+  timeSavedMinutes?: number;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface JobEvaluationReport {
+  job: {
+    id: string;
+    title: string;
+    company: string;
+    requirementsUsed: {
+      requiredSkills: string[];
+      preferredSkills: string[];
+      minExperienceYears: number;
+      responsibilities: string[];
+    };
+  };
+  candidateRankings: Array<{
+    rank: number;
+    candidateId: string;
+    candidateName: string;
+    overallScore: number;
+    aiRecommendation: AIRecommendation;
+    recruiterDecision: RecruiterDecision;
+    pipelineStage?: PipelineStage;
+    missingRequirementsCount: number;
+    strongMatchesCount: number;
+    potentialInconsistenciesCount: number;
+    relevantExperienceYears?: number;
+  }>;
+  summary: {
+    totalCandidates: number;
+    reviewedCount: number;
+    shortlistedCount: number;
+    maybeCount: number;
+    rejectedCount: number;
+    unreviewedCount: number;
+    decisionCompletionRatePercent: number;
+    rankingDisagreementsCount: number;
+    evidenceFeedbackCount: number;
+    averageTrustScore: number | null;
+    averageUsefulnessScore: number | null;
+    totalReportedTimeSavedMinutes: number;
+  };
+  disagreements: Array<{
+    candidateId: string;
+    candidateName: string;
+    systemRank: number;
+    systemScore: number;
+    recruiterDecision: RecruiterDecision;
+    category: PilotFeedbackCategory;
+    disagreementReason?: PilotDisagreementReason;
+    comment?: string;
+    createdAt: string;
+  }>;
+  evidenceFeedback: Array<{
+    candidateId?: string;
+    candidateName?: string;
+    category: PilotFeedbackCategory;
+    comment?: string;
+    createdAt: string;
+  }>;
+  commonDisagreementReasons: Record<string, number>;
+  processingMetrics: {
+    totalProcessed: number;
+    averageProcessingDurationMs: number | null;
+    failureRatePercent: number;
+  };
+  rankingMetrics: {
+    precisionAt3: number | null;
+    precisionAt5: number | null;
+    sampleSize: number;
+    hasSufficientData: boolean;
+    limitationsNotice: string;
+  };
+  factsVsPredictionsVsJudgments: {
+    observedFacts: string[];
+    automatedPredictions: string[];
+    recruiterJudgments: string[];
+  };
+}
+

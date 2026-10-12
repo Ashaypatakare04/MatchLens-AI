@@ -412,8 +412,31 @@ npm start
 | `/api/edge-cases/run` | `GET`, `POST` | Executes the 15 Edge Cases & Reliability test suite. |
 | `/api/audit-log` | `GET` | Queries immutable compliance audit events with actor and transition history. |
 | `/api/settings` | `GET` | Returns matching engine specs, model provider status, and security standards. |
+| `/api/healthz` | `GET` | Lightweight liveness probe verifying HTTP application responsiveness. |
+| `/api/readyz` | `GET` | Bounded readiness probe verifying PostgreSQL and object storage connectivity. |
+| `/api/admin/monitoring` | `GET` | Exposes background queue metrics, outbox backlog, worker heartbeat freshness, and failure codes. |
+| `/api/admin/recovery` | `POST` | Authenticated admin recovery endpoint for stale job recovery, outbox republishing, and retry. |
 
 ---
+
+## 15. Operational Commands & Diagnostic Tools
+
+```bash
+# Start background worker daemon (PostgreSQL Transactional Outbox consumer)
+npm run worker
+
+# Run SRE operational diagnostic status
+npm run recovery status
+
+# Recover stale processing jobs from crashed workers
+npm run recovery recover-stale 300000
+
+# Flush and republish pending outbox events
+npm run recovery flush-outbox 50
+
+# Safely retry a failed job for a specific tenant
+npm run recovery retry-job <organizationId> <processingJobId>
+```
 
 ## 15. Honest System Disclosures & Boundaries
 

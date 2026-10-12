@@ -16,6 +16,7 @@ import {
   Scale,
   ChevronRight,
   ShieldCheck,
+  FileCheck2,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { ScoreBadge } from "@/components/ScoreBadge";
@@ -269,6 +270,15 @@ export default function CandidateRankingPage() {
                 <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-600" />
                 <span>Adjust Weights</span>
               </button>
+
+              <Link
+                href={`/jobs/${jobId}/evaluation`}
+                className="inline-flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold transition"
+                title="View pilot evaluation report and ranking disagreements"
+              >
+                <FileCheck2 className="w-3.5 h-3.5" />
+                <span>Evaluation Report</span>
+              </Link>
 
               <Link
                 href={`/jobs/${jobId}/upload`}
