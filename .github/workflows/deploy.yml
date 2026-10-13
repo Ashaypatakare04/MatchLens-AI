@@ -116,6 +116,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Format Lowercase Container Image Tag
+        run: |
+          echo "IMAGE_REPOSITORY=ghcr.io/$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')/worker" >> $GITHUB_ENV
+
       - name: Build and Push Worker Container Image to GHCR
         uses: docker/build-push-action@v5
         with:
@@ -123,5 +127,5 @@ jobs:
           target: worker
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/worker:latest
-            ghcr.io/${{ github.repository }}/worker:${{ github.sha }}
+            ${{ env.IMAGE_REPOSITORY }}:latest
+            ${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}

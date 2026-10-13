@@ -71,6 +71,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Apply Database Migrations to CI Service
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://matchlens_test:test_password_secure@localhost:5432/matchlens_ci?sslmode=disable
+
       - name: Run Database Persistence & Optimistic Locking Tests
         run: npm run test:db
         env:
